@@ -27,21 +27,20 @@ export const Canvas = ({
   onSelectAnnotation,
 }: CanvasProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [drawing, setDrawing] = useState<DrawingState | null>(null);
   const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   
-  // Zoom and pan state
+  // Zoom state
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
   const MIN_ZOOM = 0.25;
   const MAX_ZOOM = 5;
   const ZOOM_STEP = 0.25;
 
-  // Calculate displayed image size
+  // Calculate displayed image size and container size
   useEffect(() => {
     if (!containerRef.current || !image) return;
 
@@ -49,6 +48,8 @@ export const Canvas = ({
       const container = containerRef.current!;
       const containerWidth = container.clientWidth;
       const containerHeight = container.clientHeight;
+
+      setContainerSize({ width: containerWidth, height: containerHeight });
 
       const imageAspect = image.width / image.height;
       const containerAspect = containerWidth / containerHeight;
@@ -73,11 +74,25 @@ export const Canvas = ({
     return () => observer.disconnect();
   }, [image]);
 
-  // Reset zoom/pan when image changes
+  // Reset zoom when image changes
   useEffect(() => {
     setZoom(1);
-    setPan({ x: 0, y: 0 });
   }, [image]);
+
+  // Center scroll position when zoom changes
+  useEffect(() => {
+    if (!scrollContainerRef.current) return;
+    const container = scrollContainerRef.current;
+    
+    // Calculate center position
+    const scrollWidth = container.scrollWidth;
+    const scrollHeight = container.scrollHeight;
+    const clientWidth = container.clientWidth;
+    const clientHeight = container.clientHeight;
+    
+    container.scrollLeft = (scrollWidth - clientWidth) / 2;
+    container.scrollTop = (scrollHeight - clientHeight) / 2;
+  }, [zoom, canvasSize]);
 
   const handleZoomIn = useCallback(() => {
     setZoom((prev) => Math.min(MAX_ZOOM, prev + ZOOM_STEP));
@@ -89,48 +104,53 @@ export const Canvas = ({
 
   const handleResetZoom = useCallback(() => {
     setZoom(1);
-    setPan({ x: 0, y: 0 });
   }, []);
 
-  // Mouse wheel zoom
+  // Mouse wheel zoom with Ctrl
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
       setZoom((prev) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev + delta)));
     }
+    // Normal scroll is handled by the scrollable container
   }, []);
 
   const getMousePosition = useCallback(
     (e: React.MouseEvent) => {
-      if (!containerRef.current) return { x: 0, y: 0 };
+      if (!scrollContainerRef.current) return { x: 0, y: 0 };
 
-      const rect = containerRef.current.getBoundingClientRect();
-      const offsetX = (rect.width - canvasSize.width * zoom) / 2 + pan.x;
-      const offsetY = (rect.height - canvasSize.height * zoom) / 2 + pan.y;
-
-      const x = (e.clientX - rect.left - offsetX) / (canvasSize.width * zoom);
-      const y = (e.clientY - rect.top - offsetY) / (canvasSize.height * zoom);
+      const scrollContainer = scrollContainerRef.current;
+      const rect = scrollContainer.getBoundingClientRect();
+      
+      // Account for scroll position
+      const scrollLeft = scrollContainer.scrollLeft;
+      const scrollTop = scrollContainer.scrollTop;
+      
+      // Calculate the padding around the image
+      const scaledWidth = canvasSize.width * zoom;
+      const scaledHeight = canvasSize.height * zoom;
+      const paddingX = Math.max(containerSize.width / 2, scaledWidth / 2);
+      const paddingY = Math.max(containerSize.height / 2, scaledHeight / 2);
+      
+      // Calculate position relative to the image
+      const imageLeft = paddingX - scaledWidth / 2;
+      const imageTop = paddingY - scaledHeight / 2;
+      
+      const x = (e.clientX - rect.left + scrollLeft - imageLeft) / scaledWidth;
+      const y = (e.clientY - rect.top + scrollTop - imageTop) / scaledHeight;
 
       return {
         x: Math.max(0, Math.min(1, x)),
         y: Math.max(0, Math.min(1, y)),
       };
     },
-    [canvasSize, zoom, pan]
+    [canvasSize, containerSize, zoom]
   );
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (!image) return;
-
-      // Middle mouse button or space+click for panning
-      if (e.button === 1 || (e.button === 0 && e.altKey)) {
-        e.preventDefault();
-        setIsPanning(true);
-        setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-        return;
-      }
 
       const pos = getMousePosition(e);
 
@@ -145,19 +165,11 @@ export const Canvas = ({
         onSelectAnnotation(null);
       }
     },
-    [image, tool, getMousePosition, onSelectAnnotation, pan]
+    [image, tool, getMousePosition, onSelectAnnotation]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (isPanning) {
-        setPan({
-          x: e.clientX - panStart.x,
-          y: e.clientY - panStart.y,
-        });
-        return;
-      }
-
       const pos = getMousePosition(e);
 
       if (drawing) {
@@ -173,15 +185,10 @@ export const Canvas = ({
         }
       }
     },
-    [isPanning, panStart, drawing, dragging, annotations, getMousePosition, onUpdateAnnotation]
+    [drawing, dragging, annotations, getMousePosition, onUpdateAnnotation]
   );
 
   const handleMouseUp = useCallback(() => {
-    if (isPanning) {
-      setIsPanning(false);
-      return;
-    }
-
     if (drawing) {
       const minX = Math.min(drawing.startX, drawing.currentX);
       const maxX = Math.max(drawing.startX, drawing.currentX);
@@ -208,7 +215,7 @@ export const Canvas = ({
     if (dragging) {
       setDragging(null);
     }
-  }, [isPanning, drawing, dragging, selectedClassId, onAddAnnotation]);
+  }, [drawing, dragging, selectedClassId, onAddAnnotation]);
 
   const handleBoxMouseDown = useCallback(
     (e: React.MouseEvent, ann: BoundingBox) => {
@@ -263,20 +270,19 @@ export const Canvas = ({
     };
   };
 
+  const scaledWidth = canvasSize.width * zoom;
+  const scaledHeight = canvasSize.height * zoom;
+  const paddingX = Math.max(containerSize.width / 2, scaledWidth / 2);
+  const paddingY = Math.max(containerSize.height / 2, scaledHeight / 2);
+
   return (
     <div
       ref={containerRef}
-      className={`flex-1 annotation-canvas flex items-center justify-center overflow-hidden relative ${
-        isPanning ? "cursor-grabbing" : zoom > 1 ? "cursor-grab" : ""
-      }`}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      className="flex-1 annotation-canvas relative overflow-hidden"
       onWheel={handleWheel}
     >
       {/* Zoom controls */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-card/90 backdrop-blur-sm rounded-lg p-1 border border-border shadow-lg">
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-1 bg-card/90 backdrop-blur-sm rounded-lg p-1 border border-border shadow-lg">
         <Button
           variant="ghost"
           size="sm"
@@ -303,7 +309,7 @@ export const Canvas = ({
           variant="ghost"
           size="sm"
           onClick={handleResetZoom}
-          disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
+          disabled={zoom === 1}
           className="h-8 w-8 p-0"
         >
           <Maximize className="w-4 h-4" />
@@ -312,65 +318,83 @@ export const Canvas = ({
 
       {image ? (
         <div
-          className="relative transition-transform duration-100"
-          style={{
-            width: canvasSize.width,
-            height: canvasSize.height,
-            transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
-            transformOrigin: "center center",
-          }}
+          ref={scrollContainerRef}
+          className="w-full h-full overflow-auto scrollbar-thin"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          style={{ cursor: tool === "draw" ? "crosshair" : "default" }}
         >
-          <img
-            src={image.src}
-            alt={image.name}
-            className="w-full h-full object-contain pointer-events-none select-none"
-            draggable={false}
-          />
-
-          {/* Existing annotations */}
-          {annotations.map((ann) => (
+          <div
+            className="flex items-center justify-center"
+            style={{
+              width: paddingX * 2,
+              height: paddingY * 2,
+              minWidth: "100%",
+              minHeight: "100%",
+            }}
+          >
             <div
-              key={ann.id}
-              className={`annotation-box ${
-                selectedAnnotationId === ann.id ? "annotation-box-selected" : ""
-              }`}
-              style={getBoxStyle(ann)}
-              onMouseDown={(e) => handleBoxMouseDown(e, ann)}
+              className="relative flex-shrink-0"
+              style={{
+                width: scaledWidth,
+                height: scaledHeight,
+              }}
             >
-              <span
-                className="absolute -top-5 left-0 text-xs font-medium px-1 rounded whitespace-nowrap"
-                style={{
-                  backgroundColor: getClass(ann.classId).color,
-                  color: "hsl(var(--background))",
-                  transform: `scale(${1 / zoom})`,
-                  transformOrigin: "bottom left",
-                }}
-              >
-                {getClass(ann.classId).name}
-              </span>
-            </div>
-          ))}
+              <img
+                src={image.src}
+                alt={image.name}
+                className="w-full h-full object-contain pointer-events-none select-none"
+                draggable={false}
+              />
 
-          {/* Drawing preview */}
-          {drawing && (
-            <div
-              className="absolute border-2 border-dashed pointer-events-none"
-              style={getDrawingStyle()}
-            />
-          )}
+              {/* Existing annotations */}
+              {annotations.map((ann) => (
+                <div
+                  key={ann.id}
+                  className={`annotation-box ${
+                    selectedAnnotationId === ann.id ? "annotation-box-selected" : ""
+                  }`}
+                  style={getBoxStyle(ann)}
+                  onMouseDown={(e) => handleBoxMouseDown(e, ann)}
+                >
+                  <span
+                    className="absolute -top-5 left-0 text-xs font-medium px-1 rounded whitespace-nowrap"
+                    style={{
+                      backgroundColor: getClass(ann.classId).color,
+                      color: "hsl(var(--background))",
+                    }}
+                  >
+                    {getClass(ann.classId).name}
+                  </span>
+                </div>
+              ))}
+
+              {/* Drawing preview */}
+              {drawing && (
+                <div
+                  className="absolute border-2 border-dashed pointer-events-none"
+                  style={getDrawingStyle()}
+                />
+              )}
+            </div>
+          </div>
         </div>
       ) : (
-        <div className="text-center text-muted-foreground">
-          <div className="text-6xl mb-4">🖼️</div>
-          <p className="text-lg font-medium">No image loaded</p>
-          <p className="text-sm mt-1">Upload an image to start annotating</p>
+        <div className="w-full h-full flex items-center justify-center text-center text-muted-foreground">
+          <div>
+            <div className="text-6xl mb-4">🖼️</div>
+            <p className="text-lg font-medium">No image loaded</p>
+            <p className="text-sm mt-1">Upload an image to start annotating</p>
+          </div>
         </div>
       )}
 
       {/* Zoom hint */}
       {image && zoom === 1 && (
-        <div className="absolute bottom-3 right-3 text-xs text-muted-foreground bg-card/80 px-2 py-1 rounded">
-          <kbd className="px-1 py-0.5 bg-muted rounded">Ctrl</kbd> + scroll to zoom • <kbd className="px-1 py-0.5 bg-muted rounded">Alt</kbd> + drag to pan
+        <div className="absolute bottom-3 right-3 z-10 text-xs text-muted-foreground bg-card/80 px-2 py-1 rounded">
+          <kbd className="px-1 py-0.5 bg-muted rounded">Ctrl</kbd> + scroll to zoom
         </div>
       )}
     </div>
