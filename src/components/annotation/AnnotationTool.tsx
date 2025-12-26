@@ -1,25 +1,31 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useAnnotations } from "@/hooks/useAnnotations";
-import { ImageData } from "@/types/annotation";
+import { useMultiImageAnnotations } from "@/hooks/useMultiImageAnnotations";
 import { Toolbar } from "./Toolbar";
 import { ClassPanel } from "./ClassPanel";
 import { AnnotationList } from "./AnnotationList";
 import { Canvas } from "./Canvas";
 import { ImageUpload } from "./ImageUpload";
 import { toast } from "sonner";
+import JSZip from "jszip";
 
 export const AnnotationTool = () => {
-  const [image, setImage] = useState<ImageData | null>(null);
   const [tool, setTool] = useState<"select" | "draw">("draw");
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const {
+    images,
+    currentImage,
+    currentImageIndex,
     annotations,
+    imageAnnotations,
     classes,
     selectedClassId,
     selectedAnnotationId,
+    setCurrentImageIndex,
     setSelectedClassId,
     setSelectedAnnotationId,
+    addImages,
+    removeImage,
     addAnnotation,
     updateAnnotation,
     deleteAnnotation,
@@ -28,7 +34,10 @@ export const AnnotationTool = () => {
     deleteClass,
     exportToYOLO,
     importFromYOLO,
-  } = useAnnotations();
+    getAnnotationCount,
+    getTotalAnnotations,
+    getAnnotatedImagesCount,
+  } = useMultiImageAnnotations();
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -51,24 +60,69 @@ export const AnnotationTool = () => {
         case "escape":
           setSelectedAnnotationId(null);
           break;
+        case "arrowleft":
+          if (currentImageIndex > 0) {
+            setCurrentImageIndex(currentImageIndex - 1);
+          }
+          break;
+        case "arrowright":
+          if (currentImageIndex < images.length - 1) {
+            setCurrentImageIndex(currentImageIndex + 1);
+          }
+          break;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedAnnotationId, deleteAnnotation, setSelectedAnnotationId]);
+  }, [selectedAnnotationId, deleteAnnotation, setSelectedAnnotationId, currentImageIndex, images.length, setCurrentImageIndex]);
 
-  const handleExport = useCallback(() => {
-    const content = exportToYOLO();
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
+  const handleExport = useCallback(async () => {
+    if (images.length === 0) {
+      toast.error("No images to export");
+      return;
+    }
+
+    const annotatedImages = images.filter(img => (imageAnnotations[img.id] || []).length > 0);
+    
+    if (annotatedImages.length === 0) {
+      toast.error("No annotations to export");
+      return;
+    }
+
+    const zip = new JSZip();
+
+    for (let i = 0; i < annotatedImages.length; i++) {
+      const image = annotatedImages[i];
+      const baseName = `${i + 1}`;
+      
+      // Get image extension
+      const ext = image.name.split('.').pop()?.toLowerCase() || 'png';
+      
+      // Add image file
+      const response = await fetch(image.src);
+      const blob = await response.blob();
+      zip.file(`${baseName}.${ext}`, blob);
+      
+      // Add YOLO annotation file
+      const yoloContent = exportToYOLO(image.id);
+      zip.file(`${baseName}.txt`, yoloContent);
+    }
+
+    // Add classes.txt
+    const classesContent = classes.map(c => c.name).join('\n');
+    zip.file('classes.txt', classesContent);
+
+    const content = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(content);
     const a = document.createElement("a");
     a.href = url;
-    a.download = image ? image.name.replace(/\.[^/.]+$/, ".txt") : "annotations.txt";
+    a.download = "yolo_annotations.zip";
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("Annotations exported successfully");
-  }, [exportToYOLO, image]);
+    
+    toast.success(`Exported ${annotatedImages.length} images with annotations`);
+  }, [images, imageAnnotations, exportToYOLO, classes]);
 
   const handleImport = useCallback(() => {
     importInputRef.current?.click();
@@ -83,7 +137,7 @@ export const AnnotationTool = () => {
       reader.onload = (event) => {
         try {
           importFromYOLO(event.target?.result as string);
-          toast.success(`Imported ${annotations.length} annotations`);
+          toast.success("Annotations imported successfully");
         } catch {
           toast.error("Failed to parse YOLO file");
         }
@@ -91,12 +145,12 @@ export const AnnotationTool = () => {
       reader.readAsText(file);
       e.target.value = "";
     },
-    [importFromYOLO, annotations.length]
+    [importFromYOLO]
   );
 
   const handleClear = useCallback(() => {
     clearAnnotations();
-    toast.info("All annotations cleared");
+    toast.info("Annotations cleared for current image");
   }, [clearAnnotations]);
 
   return (
@@ -112,8 +166,10 @@ export const AnnotationTool = () => {
             <p className="text-xs text-muted-foreground">Image annotation for object detection</p>
           </div>
         </div>
-        <div className="text-sm text-muted-foreground">
-          {annotations.length} annotation{annotations.length !== 1 ? "s" : ""}
+        <div className="text-sm text-muted-foreground flex items-center gap-4">
+          <span>{getAnnotatedImagesCount()}/{images.length} images annotated</span>
+          <span>•</span>
+          <span>{getTotalAnnotations()} total annotations</span>
         </div>
       </header>
 
@@ -125,14 +181,21 @@ export const AnnotationTool = () => {
         onExport={handleExport}
         onImport={handleImport}
         hasAnnotations={annotations.length > 0}
-        hasImage={!!image}
+        hasImage={!!currentImage}
       />
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left sidebar */}
         <aside className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
-          <ImageUpload image={image} onImageLoad={setImage} />
+          <ImageUpload
+            images={images}
+            currentImageIndex={currentImageIndex}
+            onImagesLoad={addImages}
+            onImageSelect={setCurrentImageIndex}
+            onImageRemove={removeImage}
+            getAnnotationCount={getAnnotationCount}
+          />
           <ClassPanel
             classes={classes}
             selectedClassId={selectedClassId}
@@ -142,6 +205,7 @@ export const AnnotationTool = () => {
           />
           <div className="flex items-center justify-between px-3 py-2 border-t border-border">
             <h3 className="text-sm font-semibold text-foreground">Annotations</h3>
+            <span className="text-xs text-muted-foreground">{annotations.length}</span>
           </div>
           <AnnotationList
             annotations={annotations}
@@ -154,7 +218,7 @@ export const AnnotationTool = () => {
 
         {/* Canvas */}
         <Canvas
-          image={image}
+          image={currentImage}
           annotations={annotations}
           classes={classes}
           selectedClassId={selectedClassId}
@@ -184,8 +248,19 @@ export const AnnotationTool = () => {
         <span>
           Class: <span className="text-foreground font-medium">{classes.find((c) => c.id === selectedClassId)?.name}</span>
         </span>
+        {currentImage && (
+          <>
+            <span>|</span>
+            <span>
+              Image: <span className="text-foreground font-medium">{currentImageIndex + 1}/{images.length}</span>
+            </span>
+          </>
+        )}
         <span>|</span>
         <span className="text-muted-foreground">
+          <kbd className="px-1 py-0.5 bg-muted rounded text-xs">←</kbd>
+          <kbd className="px-1 py-0.5 bg-muted rounded text-xs ml-0.5">→</kbd> Navigate
+          <span className="mx-2">•</span>
           <kbd className="px-1 py-0.5 bg-muted rounded text-xs">V</kbd> Select
           <span className="mx-2">•</span>
           <kbd className="px-1 py-0.5 bg-muted rounded text-xs">B</kbd> Draw

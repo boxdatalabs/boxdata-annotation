@@ -14,10 +14,16 @@ export interface AnnotationClass {
 }
 
 export interface ImageData {
+  id: string;
   src: string;
   name: string;
   width: number;
   height: number;
+  file: File;
+}
+
+export interface ImageAnnotations {
+  [imageId: string]: BoundingBox[];
 }
 
 export interface DrawingState {
