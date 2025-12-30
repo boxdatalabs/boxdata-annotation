@@ -19,7 +19,7 @@ export interface ImageData {
   name: string;
   width: number;
   height: number;
-  file: File;
+  file?: File;
 }
 
 export interface ImageAnnotations {
@@ -32,6 +32,34 @@ export interface DrawingState {
   startY: number;
   currentX: number;
   currentY: number;
+}
+
+// Task types for persistent storage
+export interface Task {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface StoredImage {
+  id: string;
+  taskId: string;
+  name: string;
+  width: number;
+  height: number;
+  blob: Blob;
+}
+
+export interface StoredAnnotations {
+  imageId: string;
+  taskId: string;
+  annotations: BoundingBox[];
+}
+
+export interface StoredClasses {
+  taskId: string;
+  classes: AnnotationClass[];
 }
 
 export const DEFAULT_CLASSES: AnnotationClass[] = [

@@ -1,7 +1,7 @@
-import { AnnotationTool } from "@/components/annotation/AnnotationTool";
+import { TaskList } from "@/components/task/TaskList";
 
 const Index = () => {
-  return <AnnotationTool />;
+  return <TaskList />;
 };
 
 export default Index;
