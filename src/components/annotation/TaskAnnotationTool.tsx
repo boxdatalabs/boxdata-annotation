@@ -12,12 +12,14 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import JSZip from "jszip";
 import { Task } from "@/types/annotation";
+import { detectTextRegions, getGeminiApiKey } from "@/services/geminiOCR";
 
 export const TaskAnnotationTool = () => {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
   const [tool, setTool] = useState<"select" | "draw">("draw");
   const [task, setTask] = useState<Task | null>(null);
+  const [isAutoAnnotating, setIsAutoAnnotating] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -178,6 +180,34 @@ export const TaskAnnotationTool = () => {
     toast.info("Annotations cleared for current image");
   }, [clearAnnotations]);
 
+  const handleAutoAnnotate = useCallback(async () => {
+    if (!currentImage) {
+      toast.error("No image selected");
+      return;
+    }
+
+    if (!getGeminiApiKey()) {
+      toast.error("Please configure your Gemini API key first (click the settings icon)");
+      return;
+    }
+
+    setIsAutoAnnotating(true);
+    try {
+      const boxes = await detectTextRegions(currentImage.src, selectedClassId);
+      
+      if (boxes.length === 0) {
+        toast.info("No text regions detected in this image");
+      } else {
+        boxes.forEach(box => addAnnotation(box));
+        toast.success(`Detected ${boxes.length} text region${boxes.length > 1 ? 's' : ''}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to auto-annotate");
+    } finally {
+      setIsAutoAnnotating(false);
+    }
+  }, [currentImage, selectedClassId, addAnnotation]);
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
@@ -218,6 +248,8 @@ export const TaskAnnotationTool = () => {
         onClear={handleClear}
         onExport={handleExport}
         onImport={handleImport}
+        onAutoAnnotate={handleAutoAnnotate}
+        isAutoAnnotating={isAutoAnnotating}
         hasAnnotations={annotations.length > 0}
         hasImage={!!currentImage}
       />
