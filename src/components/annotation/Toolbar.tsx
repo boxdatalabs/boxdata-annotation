@@ -1,6 +1,7 @@
-import { MousePointer2, Square, Trash2, Download, Upload, RotateCcw } from "lucide-react";
+import { MousePointer2, Square, Trash2, Download, Upload, RotateCcw, Wand2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ApiKeySettings } from "./ApiKeySettings";
 
 interface ToolbarProps {
   tool: "select" | "draw";
@@ -8,6 +9,8 @@ interface ToolbarProps {
   onClear: () => void;
   onExport: () => void;
   onImport: () => void;
+  onAutoAnnotate?: () => void;
+  isAutoAnnotating?: boolean;
   hasAnnotations: boolean;
   hasImage: boolean;
 }
@@ -18,6 +21,8 @@ export const Toolbar = ({
   onClear,
   onExport,
   onImport,
+  onAutoAnnotate,
+  isAutoAnnotating,
   hasAnnotations,
   hasImage,
 }: ToolbarProps) => {
@@ -75,6 +80,26 @@ export const Toolbar = ({
           </TooltipTrigger>
           <TooltipContent>Import YOLO</TooltipContent>
         </Tooltip>
+      </div>
+
+      <div className="flex items-center gap-1 px-3 border-r border-border">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={onAutoAnnotate}
+              disabled={!hasImage || isAutoAnnotating}
+              className="toolbar-btn disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isAutoAnnotating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Wand2 className="w-4 h-4" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Auto-annotate (OCR)</TooltipContent>
+        </Tooltip>
+        <ApiKeySettings />
       </div>
 
       <div className="flex-1" />

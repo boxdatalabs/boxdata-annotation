@@ -7,9 +7,11 @@ import { Canvas } from "./Canvas";
 import { ImageUpload } from "./ImageUpload";
 import { toast } from "sonner";
 import JSZip from "jszip";
+import { detectTextRegions, getGeminiApiKey } from "@/services/geminiOCR";
 
 export const AnnotationTool = () => {
   const [tool, setTool] = useState<"select" | "draw">("draw");
+  const [isAutoAnnotating, setIsAutoAnnotating] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -153,6 +155,34 @@ export const AnnotationTool = () => {
     toast.info("Annotations cleared for current image");
   }, [clearAnnotations]);
 
+  const handleAutoAnnotate = useCallback(async () => {
+    if (!currentImage) {
+      toast.error("No image selected");
+      return;
+    }
+
+    if (!getGeminiApiKey()) {
+      toast.error("Please configure your Gemini API key first (click the settings icon)");
+      return;
+    }
+
+    setIsAutoAnnotating(true);
+    try {
+      const boxes = await detectTextRegions(currentImage.src, selectedClassId);
+      
+      if (boxes.length === 0) {
+        toast.info("No text regions detected in this image");
+      } else {
+        boxes.forEach(box => addAnnotation(box));
+        toast.success(`Detected ${boxes.length} text region${boxes.length > 1 ? 's' : ''}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to auto-annotate");
+    } finally {
+      setIsAutoAnnotating(false);
+    }
+  }, [currentImage, selectedClassId, addAnnotation]);
+
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Header */}
@@ -180,6 +210,8 @@ export const AnnotationTool = () => {
         onClear={handleClear}
         onExport={handleExport}
         onImport={handleImport}
+        onAutoAnnotate={handleAutoAnnotate}
+        isAutoAnnotating={isAutoAnnotating}
         hasAnnotations={annotations.length > 0}
         hasImage={!!currentImage}
       />
