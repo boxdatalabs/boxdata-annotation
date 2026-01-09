@@ -53,19 +53,20 @@ export const detectTextRegions = async (
 
   const base64Image = await imageToBase64(imageSrc);
 
-  const prompt = `Analyze this image and detect all text regions. For each text region found, provide the bounding box coordinates as a percentage of the image dimensions (0-100).
+  const prompt = `Analyze this image and detect all text lines. Each line of text should be a separate bounding box. For each text line found, provide the bounding box coordinates as a percentage of the image dimensions (0-100).
 
 Return ONLY a JSON array with this exact format, no other text:
 [
-  {"text": "detected text", "x": 10, "y": 20, "width": 30, "height": 5},
+  {"text": "text content of the line", "x": 10, "y": 20, "width": 80, "height": 3},
   ...
 ]
 
 Where:
 - x, y: top-left corner position as percentage (0-100)
 - width, height: size as percentage (0-100)
+- Each line of text should have its own bounding box (not word-by-word, not paragraph-level)
 
-If no text is found, return an empty array: []`;
+If no text lines are found, return an empty array: []`;
 
   const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
     method: "POST",
