@@ -1,128 +1,38 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import {
   BoundingBox,
   AnnotationClass,
   ImageData,
   ImageAnnotations,
-  StoredImage,
+  DEFAULT_CLASSES,
 } from "@/types/annotation";
-import {
-  getTaskImages,
-  getTaskAnnotations,
-  getTaskClasses,
-  addImage,
-  deleteImage,
-  saveAnnotations,
-  saveClasses,
-} from "@/lib/db";
 
-export const useTaskAnnotations = (taskId: string) => {
+export const useTaskAnnotations = (_taskId: string) => {
   const [images, setImages] = useState<ImageData[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
   const [imageAnnotations, setImageAnnotations] = useState<ImageAnnotations>({});
-  const [classes, setClasses] = useState<AnnotationClass[]>([]);
+  const [classes, setClasses] = useState<AnnotationClass[]>([...DEFAULT_CLASSES]);
   const [selectedClassId, setSelectedClassId] = useState<number>(0);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const pendingAnnotationSaves = useRef<Set<string>>(new Set());
 
   const currentImage = images[currentImageIndex] || null;
   const annotations = currentImage ? (imageAnnotations[currentImage.id] || []) : [];
 
-  // Load task data on mount
-  useEffect(() => {
-    const loadTaskData = async () => {
-      setLoading(true);
-      try {
-        const [storedImages, storedAnnotations, storedClasses] = await Promise.all([
-          getTaskImages(taskId),
-          getTaskAnnotations(taskId),
-          getTaskClasses(taskId),
-        ]);
+  const addImages = useCallback((newImages: ImageData[]) => {
+    setImages((prev) => {
+      const existingIds = new Set(prev.map((img) => img.id));
+      const unique = newImages.filter((img) => !existingIds.has(img.id));
+      return [...prev, ...unique];
+    });
+  }, []);
 
-        // Convert stored images to ImageData with blob URLs
-        const imageDataList: ImageData[] = storedImages.map((img) => ({
-          id: img.id,
-          name: img.name,
-          width: img.width,
-          height: img.height,
-          src: URL.createObjectURL(img.blob),
-        }));
-
-        setImages(imageDataList);
-        setImageAnnotations(storedAnnotations);
-        setClasses(storedClasses);
-      } catch (error) {
-        console.error("Failed to load task data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadTaskData();
-
-    // Cleanup blob URLs on unmount
-    return () => {
-      images.forEach((img) => {
-        if (img.src.startsWith("blob:")) {
-          URL.revokeObjectURL(img.src);
-        }
-      });
-    };
-  }, [taskId]);
-
-  // Debounced save for annotations
-  const scheduleSave = useCallback((imageId: string) => {
-    pendingAnnotationSaves.current.add(imageId);
-    
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    
-    saveTimeoutRef.current = setTimeout(async () => {
-      const toSave = Array.from(pendingAnnotationSaves.current);
-      pendingAnnotationSaves.current.clear();
-      
-      for (const imgId of toSave) {
-        const anns = imageAnnotations[imgId] || [];
-        await saveAnnotations(imgId, taskId, anns);
-      }
-    }, 500);
-  }, [taskId, imageAnnotations]);
-
-  const addImages = useCallback(async (newImages: ImageData[]) => {
-    const existingIds = new Set(images.map((img) => img.id));
-    const uniqueImages = newImages.filter((img) => !existingIds.has(img.id));
-
-    for (const img of uniqueImages) {
-      if (img.file) {
-        const storedImage: StoredImage = {
-          id: img.id,
-          taskId,
-          name: img.name,
-          width: img.width,
-          height: img.height,
-          blob: img.file,
-        };
-        await addImage(storedImage);
-      }
-    }
-
-    setImages((prev) => [...prev, ...uniqueImages]);
-  }, [images, taskId]);
-
-  const removeImage = useCallback(async (imageId: string) => {
-    await deleteImage(imageId);
-    
+  const removeImage = useCallback((imageId: string) => {
     setImages((prev) => {
       const index = prev.findIndex((img) => img.id === imageId);
       const img = prev.find((img) => img.id === imageId);
       if (img?.src.startsWith("blob:")) {
         URL.revokeObjectURL(img.src);
       }
-      
       const newImages = prev.filter((img) => img.id !== imageId);
       if (newImages.length === 0) {
         setCurrentImageIndex(0);
@@ -131,7 +41,6 @@ export const useTaskAnnotations = (taskId: string) => {
       }
       return newImages;
     });
-    
     setImageAnnotations((prev) => {
       const { [imageId]: _, ...rest } = prev;
       return rest;
@@ -140,118 +49,82 @@ export const useTaskAnnotations = (taskId: string) => {
 
   const addAnnotation = useCallback((box: Omit<BoundingBox, "id">) => {
     if (!currentImage) return "";
-    
     const newAnnotation: BoundingBox = {
       ...box,
       id: crypto.randomUUID(),
     };
-    
-    setImageAnnotations((prev) => {
-      const updated = {
-        ...prev,
-        [currentImage.id]: [...(prev[currentImage.id] || []), newAnnotation],
-      };
-      // Schedule save after state update
-      setTimeout(() => scheduleSave(currentImage.id), 0);
-      return updated;
-    });
-    
+    setImageAnnotations((prev) => ({
+      ...prev,
+      [currentImage.id]: [...(prev[currentImage.id] || []), newAnnotation],
+    }));
     setSelectedAnnotationId(newAnnotation.id);
     return newAnnotation.id;
-  }, [currentImage, scheduleSave]);
+  }, [currentImage]);
 
   const updateAnnotation = useCallback((id: string, updates: Partial<BoundingBox>) => {
     if (!currentImage) return;
-    
-    setImageAnnotations((prev) => {
-      const updated = {
-        ...prev,
-        [currentImage.id]: (prev[currentImage.id] || []).map((ann) =>
-          ann.id === id ? { ...ann, ...updates } : ann
-        ),
-      };
-      setTimeout(() => scheduleSave(currentImage.id), 0);
-      return updated;
-    });
-  }, [currentImage, scheduleSave]);
+    setImageAnnotations((prev) => ({
+      ...prev,
+      [currentImage.id]: (prev[currentImage.id] || []).map((ann) =>
+        ann.id === id ? { ...ann, ...updates } : ann
+      ),
+    }));
+  }, [currentImage]);
 
   const deleteAnnotation = useCallback((id: string) => {
     if (!currentImage) return;
-    
-    setImageAnnotations((prev) => {
-      const updated = {
-        ...prev,
-        [currentImage.id]: (prev[currentImage.id] || []).filter((ann) => ann.id !== id),
-      };
-      setTimeout(() => scheduleSave(currentImage.id), 0);
-      return updated;
-    });
-    
+    setImageAnnotations((prev) => ({
+      ...prev,
+      [currentImage.id]: (prev[currentImage.id] || []).filter((ann) => ann.id !== id),
+    }));
     if (selectedAnnotationId === id) {
       setSelectedAnnotationId(null);
     }
-  }, [currentImage, selectedAnnotationId, scheduleSave]);
+  }, [currentImage, selectedAnnotationId]);
 
   const clearAnnotations = useCallback(() => {
     if (!currentImage) return;
-    
-    setImageAnnotations((prev) => {
-      const updated = { ...prev, [currentImage.id]: [] };
-      setTimeout(() => scheduleSave(currentImage.id), 0);
-      return updated;
-    });
+    setImageAnnotations((prev) => ({ ...prev, [currentImage.id]: [] }));
     setSelectedAnnotationId(null);
-  }, [currentImage, scheduleSave]);
+  }, [currentImage]);
 
-  const addClass = useCallback(async (name: string) => {
-    const newId = classes.length;
+  const addClass = useCallback((name: string) => {
+    const newId = classes.length > 0 ? Math.max(...classes.map(c => c.id)) + 1 : 0;
     const colorIndex = newId % 8;
     const newClass: AnnotationClass = {
       id: newId,
       name,
       color: `hsl(var(--class-${colorIndex + 1}))`,
     };
-    
-    const updatedClasses = [...classes, newClass];
-    setClasses(updatedClasses);
-    await saveClasses(taskId, updatedClasses);
+    setClasses((prev) => [...prev, newClass]);
     return newId;
-  }, [classes, taskId]);
+  }, [classes]);
 
-  const deleteClass = useCallback(async (id: number) => {
-    const updatedClasses = classes.filter((c) => c.id !== id);
-    setClasses(updatedClasses);
-    await saveClasses(taskId, updatedClasses);
-    
-    // Update annotations that use this class
+  const deleteClass = useCallback((id: number) => {
+    setClasses((prev) => prev.filter((c) => c.id !== id));
     setImageAnnotations((prev) => {
       const updated: ImageAnnotations = {};
       for (const imgId in prev) {
         updated[imgId] = prev[imgId].map((ann) =>
           ann.classId === id ? { ...ann, classId: 0 } : ann
         );
-        scheduleSave(imgId);
       }
       return updated;
     });
-    
     if (selectedClassId === id) {
       setSelectedClassId(0);
     }
-  }, [classes, selectedClassId, taskId, scheduleSave]);
+  }, [selectedClassId]);
 
   const exportToYOLO = useCallback((imageId: string) => {
     const anns = imageAnnotations[imageId] || [];
     return anns
-      .map((ann) => {
-        return `${ann.classId} ${ann.x.toFixed(6)} ${ann.y.toFixed(6)} ${ann.width.toFixed(6)} ${ann.height.toFixed(6)}`;
-      })
+      .map((ann) => `${ann.classId} ${ann.x.toFixed(6)} ${ann.y.toFixed(6)} ${ann.width.toFixed(6)} ${ann.height.toFixed(6)}`)
       .join("\n");
   }, [imageAnnotations]);
 
   const importFromYOLO = useCallback((content: string) => {
     if (!currentImage) return;
-    
     const lines = content.trim().split("\n").filter((line) => line.trim());
     const newAnnotations: BoundingBox[] = lines.map((line) => {
       const parts = line.trim().split(/\s+/);
@@ -264,13 +137,8 @@ export const useTaskAnnotations = (taskId: string) => {
         height: parseFloat(parts[4]),
       };
     });
-    
-    setImageAnnotations((prev) => {
-      const updated = { ...prev, [currentImage.id]: newAnnotations };
-      setTimeout(() => scheduleSave(currentImage.id), 0);
-      return updated;
-    });
-  }, [currentImage, scheduleSave]);
+    setImageAnnotations((prev) => ({ ...prev, [currentImage.id]: newAnnotations }));
+  }, [currentImage]);
 
   const getAnnotationCount = useCallback((imageId: string) => {
     return (imageAnnotations[imageId] || []).length;
@@ -284,12 +152,12 @@ export const useTaskAnnotations = (taskId: string) => {
     return Object.entries(imageAnnotations).filter(([_, anns]) => anns.length > 0).length;
   }, [imageAnnotations]);
 
-  // Get blob for export
   const getImageBlob = useCallback(async (imageId: string): Promise<Blob | null> => {
-    const storedImages = await getTaskImages(taskId);
-    const stored = storedImages.find((img) => img.id === imageId);
-    return stored?.blob || null;
-  }, [taskId]);
+    const img = images.find((i) => i.id === imageId);
+    if (!img) return null;
+    const response = await fetch(img.src);
+    return response.blob();
+  }, [images]);
 
   return {
     images,
@@ -300,7 +168,7 @@ export const useTaskAnnotations = (taskId: string) => {
     classes,
     selectedClassId,
     selectedAnnotationId,
-    loading,
+    loading: false,
     setCurrentImageIndex,
     setSelectedClassId,
     setSelectedAnnotationId,

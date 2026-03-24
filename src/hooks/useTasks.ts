@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Task } from "@/types/annotation";
-import { getProjectTasks, createTask, deleteTask, updateTask, getTaskImageCount, getTaskAnnotationCount } from "@/lib/db";
+import { useState, useCallback } from "react";
+import { Task, DEFAULT_CLASSES, AnnotationClass } from "@/types/annotation";
 
 interface TaskWithCounts extends Task {
   imageCount: number;
@@ -9,55 +8,40 @@ interface TaskWithCounts extends Task {
 
 export const useTasks = (projectId: string) => {
   const [tasks, setTasks] = useState<TaskWithCounts[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const loadTasks = useCallback(async () => {
-    setLoading(true);
-    try {
-      const allTasks = await getProjectTasks(projectId);
-      const tasksWithCounts = await Promise.all(
-        allTasks.map(async (task) => ({
-          ...task,
-          imageCount: await getTaskImageCount(task.id),
-          annotationCount: await getTaskAnnotationCount(task.id),
-        }))
-      );
-      setTasks(tasksWithCounts);
-    } catch (error) {
-      console.error("Failed to load tasks:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
-
-  const addTask = useCallback(async (name: string) => {
-    const task = await createTask(projectId, name);
+  const addTask = useCallback((name: string) => {
+    const task: Task = {
+      id: crypto.randomUUID(),
+      projectId,
+      name,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
     setTasks((prev) => [{ ...task, imageCount: 0, annotationCount: 0 }, ...prev]);
     return task;
   }, [projectId]);
 
-  const removeTask = useCallback(async (id: string) => {
-    await deleteTask(id);
+  const removeTask = useCallback((id: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const renameTask = useCallback(async (id: string, name: string) => {
-    await updateTask(id, { name });
+  const renameTask = useCallback((id: string, name: string) => {
     setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, name } : t))
     );
   }, []);
 
+  const getTask = useCallback((id: string) => {
+    return tasks.find((t) => t.id === id);
+  }, [tasks]);
+
   return {
     tasks,
-    loading,
+    loading: false,
     addTask,
     removeTask,
     renameTask,
-    refreshTasks: loadTasks,
+    getTask,
+    refreshTasks: () => {},
   };
 };
