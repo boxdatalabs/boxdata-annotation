@@ -22,21 +22,7 @@ export const TaskList = () => {
   const { tasks, loading, addTask, removeTask } = useTasks(projectId!);
   const [newTaskName, setNewTaskName] = useState("");
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
-  const [project, setProject] = useState<Project | null>(null);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (projectId) {
-      getProject(projectId).then((p) => {
-        if (p) {
-          setProject(p);
-        } else {
-          toast.error("Project not found");
-          navigate("/");
-        }
-      });
-    }
-  }, [projectId, navigate]);
 
   const handleCreateTask = async () => {
     if (!newTaskName.trim()) {
