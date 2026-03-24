@@ -59,7 +59,7 @@ export const TaskAnnotationTool = () => {
           setTask(t);
         } else {
           toast.error("Task not found");
-          navigate("/");
+          navigate(`/project/${projectId}`);
         }
       });
     }
