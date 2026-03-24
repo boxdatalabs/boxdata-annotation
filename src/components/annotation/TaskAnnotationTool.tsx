@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTaskAnnotations } from "@/hooks/useTaskAnnotations";
-import { getTask } from "@/lib/db";
+
 import { Toolbar } from "./Toolbar";
 import { ClassPanel } from "./ClassPanel";
 import { AnnotationList } from "./AnnotationList";
