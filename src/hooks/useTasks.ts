@@ -1,20 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
 import { Task } from "@/types/annotation";
-import { getAllTasks, createTask, deleteTask, updateTask, getTaskImageCount, getTaskAnnotationCount } from "@/lib/db";
+import { getProjectTasks, createTask, deleteTask, updateTask, getTaskImageCount, getTaskAnnotationCount } from "@/lib/db";
 
 interface TaskWithCounts extends Task {
   imageCount: number;
   annotationCount: number;
 }
 
-export const useTasks = () => {
+export const useTasks = (projectId: string) => {
   const [tasks, setTasks] = useState<TaskWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
     try {
-      const allTasks = await getAllTasks();
+      const allTasks = await getProjectTasks(projectId);
       const tasksWithCounts = await Promise.all(
         allTasks.map(async (task) => ({
           ...task,
@@ -28,17 +28,17 @@ export const useTasks = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
 
   const addTask = useCallback(async (name: string) => {
-    const task = await createTask(name);
+    const task = await createTask(projectId, name);
     setTasks((prev) => [{ ...task, imageCount: 0, annotationCount: 0 }, ...prev]);
     return task;
-  }, []);
+  }, [projectId]);
 
   const removeTask = useCallback(async (id: string) => {
     await deleteTask(id);
