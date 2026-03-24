@@ -82,7 +82,7 @@ export const TaskList = () => {
               <span className="text-primary-foreground font-bold text-lg">Y</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">{project?.name || "Project"}</h1>
+              <h1 className="text-2xl font-bold text-foreground">Project</h1>
               <p className="text-sm text-muted-foreground">
                 Manage tasks and annotate images
               </p>
