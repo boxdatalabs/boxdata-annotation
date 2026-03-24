@@ -15,7 +15,7 @@ import { Task } from "@/types/annotation";
 import { detectTextRegions, getGeminiApiKey } from "@/services/geminiOCR";
 
 export const TaskAnnotationTool = () => {
-  const { taskId } = useParams<{ taskId: string }>();
+  const { taskId, projectId } = useParams<{ taskId: string; projectId: string }>();
   const navigate = useNavigate();
   const [tool, setTool] = useState<"select" | "draw">("draw");
   const [task, setTask] = useState<Task | null>(null);
