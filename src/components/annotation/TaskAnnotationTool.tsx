@@ -18,7 +18,6 @@ export const TaskAnnotationTool = () => {
   const { taskId, projectId } = useParams<{ taskId: string; projectId: string }>();
   const navigate = useNavigate();
   const [tool, setTool] = useState<"select" | "draw">("draw");
-  const [task, setTask] = useState<Task | null>(null);
   const [isAutoAnnotating, setIsAutoAnnotating] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
