@@ -135,7 +135,7 @@ export const TaskAnnotationTool = () => {
     URL.revokeObjectURL(url);
 
     toast.success(`Exported ${annotatedImages.length} images with annotations`);
-  }, [images, imageAnnotations, exportToYOLO, classes, getImageBlob, task]);
+  }, [images, imageAnnotations, exportToYOLO, classes, getImageBlob]);
 
   const handleImport = useCallback(() => {
     importInputRef.current?.click();
