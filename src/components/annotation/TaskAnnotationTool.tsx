@@ -130,7 +130,7 @@ export const TaskAnnotationTool = () => {
     const url = URL.createObjectURL(content);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${task?.name || "annotations"}_yolo.zip`;
+    a.download = "annotations_yolo.zip";
     a.click();
     URL.revokeObjectURL(url);
 
