@@ -214,7 +214,7 @@ export const TaskAnnotationTool = () => {
             <span className="text-primary-foreground font-bold text-sm">Y</span>
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-foreground">{task?.name || "Task"}</h1>
+            <h1 className="text-lg font-semibold text-foreground">Task</h1>
             <p className="text-xs text-muted-foreground">Image annotation for object detection</p>
           </div>
         </div>
