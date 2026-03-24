@@ -15,7 +15,7 @@ import { Task } from "@/types/annotation";
 import { detectTextRegions, getGeminiApiKey } from "@/services/geminiOCR";
 
 export const TaskAnnotationTool = () => {
-  const { taskId } = useParams<{ taskId: string }>();
+  const { taskId, projectId } = useParams<{ taskId: string; projectId: string }>();
   const navigate = useNavigate();
   const [tool, setTool] = useState<"select" | "draw">("draw");
   const [task, setTask] = useState<Task | null>(null);
@@ -59,7 +59,7 @@ export const TaskAnnotationTool = () => {
           setTask(t);
         } else {
           toast.error("Task not found");
-          navigate("/");
+          navigate(`/project/${projectId}`);
         }
       });
     }
@@ -221,7 +221,7 @@ export const TaskAnnotationTool = () => {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+          <Button variant="ghost" size="icon" onClick={() => navigate(`/project/${projectId}`)}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">

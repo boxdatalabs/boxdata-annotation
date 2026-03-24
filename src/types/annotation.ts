@@ -34,9 +34,19 @@ export interface DrawingState {
   currentY: number;
 }
 
+// Project types
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // Task types for persistent storage
 export interface Task {
   id: string;
+  projectId: string;
   name: string;
   createdAt: number;
   updatedAt: number;

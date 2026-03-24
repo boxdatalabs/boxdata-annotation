@@ -1,7 +1,7 @@
-import { TaskList } from "@/components/task/TaskList";
+import { ProjectList } from "@/components/project/ProjectList";
 
 const Index = () => {
-  return <TaskList />;
+  return <ProjectList />;
 };
 
 export default Index;

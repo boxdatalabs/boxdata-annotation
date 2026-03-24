@@ -1,14 +1,11 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { useTasks } from "@/hooks/useTasks";
+import { useNavigate } from "react-router-dom";
+import { useProjects } from "@/hooks/useProjects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, FolderOpen, Trash2, Image, Tag, Clock, ArrowLeft } from "lucide-react";
+import { Plus, FolderOpen, Trash2, ListTodo, Clock } from "lucide-react";
 import { toast } from "sonner";
-import { getProject } from "@/lib/db";
-import { Project } from "@/types/annotation";
-import { useEffect } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,47 +17,32 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-export const TaskList = () => {
-  const { projectId } = useParams<{ projectId: string }>();
-  const { tasks, loading, addTask, removeTask } = useTasks(projectId!);
-  const [newTaskName, setNewTaskName] = useState("");
-  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
-  const [project, setProject] = useState<Project | null>(null);
+export const ProjectList = () => {
+  const { projects, loading, addProject, removeProject } = useProjects();
+  const [newProjectName, setNewProjectName] = useState("");
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (projectId) {
-      getProject(projectId).then((p) => {
-        if (p) {
-          setProject(p);
-        } else {
-          toast.error("Project not found");
-          navigate("/");
-        }
-      });
-    }
-  }, [projectId, navigate]);
-
-  const handleCreateTask = async () => {
-    if (!newTaskName.trim()) {
-      toast.error("Please enter a task name");
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) {
+      toast.error("Please enter a project name");
       return;
     }
-    const task = await addTask(newTaskName.trim());
-    setNewTaskName("");
-    toast.success(`Task "${task.name}" created`);
+    const project = await addProject(newProjectName.trim());
+    setNewProjectName("");
+    toast.success(`Project "${project.name}" created`);
   };
 
-  const handleDeleteTask = async () => {
-    if (taskToDelete) {
-      await removeTask(taskToDelete);
-      toast.success("Task deleted");
-      setTaskToDelete(null);
+  const handleDeleteProject = async () => {
+    if (projectToDelete) {
+      await removeProject(projectToDelete);
+      toast.success("Project deleted");
+      setProjectToDelete(null);
     }
   };
 
-  const handleOpenTask = (taskId: string) => {
-    navigate(`/project/${projectId}/task/${taskId}`);
+  const handleOpenProject = (projectId: string) => {
+    navigate(`/project/${projectId}`);
   };
 
   const formatDate = (timestamp: number) => {
@@ -76,7 +58,7 @@ export const TaskList = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Loading tasks...</div>
+        <div className="text-muted-foreground">Loading projects...</div>
       </div>
     );
   }
@@ -87,21 +69,13 @@ export const TaskList = () => {
       <header className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-6 py-6">
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/")}
-              className="mr-1"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
             <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold text-lg">Y</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">{project?.name || "Project"}</h1>
+              <h1 className="text-2xl font-bold text-foreground">YOLO Annotator</h1>
               <p className="text-sm text-muted-foreground">
-                Manage tasks and annotate images
+                Create projects and annotate images for object detection
               </p>
             </div>
           </div>
@@ -110,70 +84,66 @@ export const TaskList = () => {
 
       {/* Main content */}
       <main className="max-w-5xl mx-auto px-6 py-8">
-        {/* Create new task */}
+        {/* Create new project */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle className="text-lg">Create New Task</CardTitle>
+            <CardTitle className="text-lg">Create New Project</CardTitle>
             <CardDescription>
-              Organize your annotations by creating separate tasks
+              Organize your work by creating projects, then add tasks inside each project
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex gap-3">
               <Input
-                placeholder="Enter task name..."
-                value={newTaskName}
-                onChange={(e) => setNewTaskName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreateTask()}
+                placeholder="Enter project name..."
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
                 className="flex-1"
               />
-              <Button onClick={handleCreateTask}>
+              <Button onClick={handleCreateProject}>
                 <Plus className="w-4 h-4 mr-2" />
-                Create Task
+                Create Project
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Task list */}
+        {/* Project list */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-foreground">Tasks</h2>
+          <h2 className="text-lg font-semibold text-foreground">Your Projects</h2>
           
-          {tasks.length === 0 ? (
+          {projects.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="py-12 text-center">
                 <FolderOpen className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
                 <p className="text-muted-foreground">
-                  No tasks yet. Create your first task to get started.
+                  No projects yet. Create your first project to get started.
                 </p>
               </CardContent>
             </Card>
           ) : (
             <div className="grid gap-4">
-              {tasks.map((task) => (
+              {projects.map((project) => (
                 <Card
-                  key={task.id}
+                  key={project.id}
                   className="hover:bg-accent/50 transition-colors cursor-pointer group"
-                  onClick={() => handleOpenTask(task.id)}
+                  onClick={() => handleOpenProject(project.id)}
                 >
                   <CardContent className="py-4">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                          {task.name}
+                          {project.name}
                         </h3>
                         <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
-                            <Image className="w-4 h-4" />
-                            {task.imageCount} images
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Tag className="w-4 h-4" />
-                            {task.annotationCount} annotations
+                            <ListTodo className="w-4 h-4" />
+                            {project.taskCount} tasks
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />
-                            {formatDate(task.updatedAt)}
+                            {formatDate(project.updatedAt)}
                           </span>
                         </div>
                       </div>
@@ -183,7 +153,7 @@ export const TaskList = () => {
                         className="opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setTaskToDelete(task.id);
+                          setProjectToDelete(project.id);
                         }}
                       >
                         <Trash2 className="w-4 h-4 text-destructive" />
@@ -198,18 +168,18 @@ export const TaskList = () => {
       </main>
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={!!taskToDelete} onOpenChange={() => setTaskToDelete(null)}>
+      <AlertDialog open={!!projectToDelete} onOpenChange={() => setProjectToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Task?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Project?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the task and all its images and annotations.
+              This will permanently delete the project, all its tasks, images, and annotations.
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteTask} className="bg-destructive text-destructive-foreground">
+            <AlertDialogAction onClick={handleDeleteProject} className="bg-destructive text-destructive-foreground">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
