@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Project } from "@/types/annotation";
-import { getAllProjects, createProject, deleteProject, updateProject, getProjectTaskCount } from "@/lib/db";
 
 interface ProjectWithCounts extends Project {
   taskCount: number;
@@ -8,54 +7,53 @@ interface ProjectWithCounts extends Project {
 
 export const useProjects = () => {
   const [projects, setProjects] = useState<ProjectWithCounts[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const loadProjects = useCallback(async () => {
-    setLoading(true);
-    try {
-      const allProjects = await getAllProjects();
-      const projectsWithCounts = await Promise.all(
-        allProjects.map(async (project) => ({
-          ...project,
-          taskCount: await getProjectTaskCount(project.id),
-        }))
-      );
-      setProjects(projectsWithCounts);
-    } catch (error) {
-      console.error("Failed to load projects:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
-
-  const addProject = useCallback(async (name: string, description?: string) => {
-    const project = await createProject(name, description);
+  const addProject = useCallback((name: string, description?: string) => {
+    const project: Project = {
+      id: crypto.randomUUID(),
+      name,
+      description,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
     setProjects((prev) => [{ ...project, taskCount: 0 }, ...prev]);
     return project;
   }, []);
 
-  const removeProject = useCallback(async (id: string) => {
-    await deleteProject(id);
+  const removeProject = useCallback((id: string) => {
     setProjects((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
-  const renameProject = useCallback(async (id: string, name: string) => {
-    await updateProject(id, { name });
+  const renameProject = useCallback((id: string, name: string) => {
     setProjects((prev) =>
       prev.map((p) => (p.id === id ? { ...p, name } : p))
     );
   }, []);
 
+  const getProject = useCallback((id: string) => {
+    return projects.find((p) => p.id === id);
+  }, [projects]);
+
+  const incrementTaskCount = useCallback((projectId: string) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, taskCount: p.taskCount + 1 } : p))
+    );
+  }, []);
+
+  const decrementTaskCount = useCallback((projectId: string) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, taskCount: Math.max(0, p.taskCount - 1) } : p))
+    );
+  }, []);
+
   return {
     projects,
-    loading,
+    loading: false,
     addProject,
     removeProject,
     renameProject,
-    refreshProjects: loadProjects,
+    getProject,
+    incrementTaskCount,
+    decrementTaskCount,
   };
 };

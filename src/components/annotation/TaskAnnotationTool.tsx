@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTaskAnnotations } from "@/hooks/useTaskAnnotations";
-import { getTask } from "@/lib/db";
+
 import { Toolbar } from "./Toolbar";
 import { ClassPanel } from "./ClassPanel";
 import { AnnotationList } from "./AnnotationList";
@@ -11,14 +11,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import JSZip from "jszip";
-import { Task } from "@/types/annotation";
+
 import { detectTextRegions, getGeminiApiKey } from "@/services/geminiOCR";
 
 export const TaskAnnotationTool = () => {
   const { taskId, projectId } = useParams<{ taskId: string; projectId: string }>();
   const navigate = useNavigate();
   const [tool, setTool] = useState<"select" | "draw">("draw");
-  const [task, setTask] = useState<Task | null>(null);
   const [isAutoAnnotating, setIsAutoAnnotating] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -51,19 +50,6 @@ export const TaskAnnotationTool = () => {
     getImageBlob,
   } = useTaskAnnotations(taskId || "");
 
-  // Load task info
-  useEffect(() => {
-    if (taskId) {
-      getTask(taskId).then((t) => {
-        if (t) {
-          setTask(t);
-        } else {
-          toast.error("Task not found");
-          navigate(`/project/${projectId}`);
-        }
-      });
-    }
-  }, [taskId, navigate]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -144,12 +130,12 @@ export const TaskAnnotationTool = () => {
     const url = URL.createObjectURL(content);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${task?.name || "annotations"}_yolo.zip`;
+    a.download = "annotations_yolo.zip";
     a.click();
     URL.revokeObjectURL(url);
 
     toast.success(`Exported ${annotatedImages.length} images with annotations`);
-  }, [images, imageAnnotations, exportToYOLO, classes, getImageBlob, task]);
+  }, [images, imageAnnotations, exportToYOLO, classes, getImageBlob]);
 
   const handleImport = useCallback(() => {
     importInputRef.current?.click();
@@ -228,7 +214,7 @@ export const TaskAnnotationTool = () => {
             <span className="text-primary-foreground font-bold text-sm">Y</span>
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-foreground">{task?.name || "Task"}</h1>
+            <h1 className="text-lg font-semibold text-foreground">Task</h1>
             <p className="text-xs text-muted-foreground">Image annotation for object detection</p>
           </div>
         </div>

@@ -6,9 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, FolderOpen, Trash2, Image, Tag, Clock, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { getProject } from "@/lib/db";
-import { Project } from "@/types/annotation";
-import { useEffect } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,21 +22,7 @@ export const TaskList = () => {
   const { tasks, loading, addTask, removeTask } = useTasks(projectId!);
   const [newTaskName, setNewTaskName] = useState("");
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
-  const [project, setProject] = useState<Project | null>(null);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (projectId) {
-      getProject(projectId).then((p) => {
-        if (p) {
-          setProject(p);
-        } else {
-          toast.error("Project not found");
-          navigate("/");
-        }
-      });
-    }
-  }, [projectId, navigate]);
 
   const handleCreateTask = async () => {
     if (!newTaskName.trim()) {
@@ -99,7 +82,7 @@ export const TaskList = () => {
               <span className="text-primary-foreground font-bold text-lg">Y</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">{project?.name || "Project"}</h1>
+              <h1 className="text-2xl font-bold text-foreground">Project</h1>
               <p className="text-sm text-muted-foreground">
                 Manage tasks and annotate images
               </p>
