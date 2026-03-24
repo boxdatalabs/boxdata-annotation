@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import JSZip from "jszip";
-import { Task } from "@/types/annotation";
+
 import { detectTextRegions, getGeminiApiKey } from "@/services/geminiOCR";
 
 export const TaskAnnotationTool = () => {
