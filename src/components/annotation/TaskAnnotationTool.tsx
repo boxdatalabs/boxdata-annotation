@@ -50,19 +50,6 @@ export const TaskAnnotationTool = () => {
     getImageBlob,
   } = useTaskAnnotations(taskId || "");
 
-  // Load task info
-  useEffect(() => {
-    if (taskId) {
-      getTask(taskId).then((t) => {
-        if (t) {
-          setTask(t);
-        } else {
-          toast.error("Task not found");
-          navigate(`/project/${projectId}`);
-        }
-      });
-    }
-  }, [taskId, navigate]);
 
   // Keyboard shortcuts
   useEffect(() => {
