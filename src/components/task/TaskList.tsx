@@ -6,9 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, FolderOpen, Trash2, Image, Tag, Clock, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { getProject } from "@/lib/db";
-import { Project } from "@/types/annotation";
-import { useEffect } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
