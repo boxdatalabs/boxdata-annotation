@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Task, DEFAULT_CLASSES, AnnotationClass } from "@/types/annotation";
+import { Task, TaskType } from "@/types/annotation";
 
 interface TaskWithCounts extends Task {
   imageCount: number;
@@ -9,11 +9,12 @@ interface TaskWithCounts extends Task {
 export const useTasks = (projectId: string) => {
   const [tasks, setTasks] = useState<TaskWithCounts[]>([]);
 
-  const addTask = useCallback((name: string) => {
+  const addTask = useCallback((name: string, type: TaskType = "image") => {
     const task: Task = {
       id: crypto.randomUUID(),
       projectId,
       name,
+      type,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
