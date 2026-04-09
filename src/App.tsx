@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import ProjectPage from "./pages/Project";
 import TaskPage from "./pages/Task";
+import SpeechToTextPage from "./pages/SpeechToText";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
