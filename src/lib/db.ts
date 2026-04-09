@@ -189,6 +189,7 @@ export async function createTask(projectId: string, name: string): Promise<Task>
     id: crypto.randomUUID(),
     projectId,
     name,
+    type: "image",
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };

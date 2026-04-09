@@ -44,12 +44,23 @@ export interface Project {
 }
 
 // Task types for persistent storage
+export type TaskType = "image" | "speech-to-text";
+
 export interface Task {
   id: string;
   projectId: string;
   name: string;
+  type: TaskType;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface VideoSegment {
+  id: string;
+  startTime: number; // seconds
+  endTime: number; // seconds
+  labelKhmer: string;
+  labelEnglish: string;
 }
 
 export interface StoredImage {
