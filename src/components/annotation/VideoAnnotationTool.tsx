@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
+import JSZip from "jszip";
 import {
   ArrowLeft,
   Upload,
@@ -14,35 +15,85 @@ import {
   Trash2,
   Download,
   Plus,
+  Save,
+  Loader2,
 } from "lucide-react";
+
+// WAV encoding helper
+function encodeWAV(samples: Float32Array, sampleRate: number): ArrayBuffer {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return buffer;
+}
+
+async function extractAudioSegment(
+  videoFile: File,
+  startTime: number,
+  endTime: number
+): Promise<ArrayBuffer> {
+  const audioCtx = new OfflineAudioContext(1, 44100 * (endTime - startTime), 44100);
+  const arrayBuffer = await videoFile.arrayBuffer();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(audioCtx.destination);
+  source.start(0, startTime, endTime - startTime);
+
+  const rendered = await audioCtx.startRendering();
+  const samples = rendered.getChannelData(0);
+  return encodeWAV(samples, 44100);
+}
 
 export const VideoAnnotationTool = () => {
   const { projectId } = useParams<{ taskId: string; projectId: string }>();
   const navigate = useNavigate();
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoName, setVideoName] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // Segment creation
   const [segments, setSegments] = useState<VideoSegment[]>([]);
   const [markStart, setMarkStart] = useState<number | null>(null);
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
 
-  // Timeline scrubbing
   const timelineRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-
     const onTimeUpdate = () => setCurrentTime(video.currentTime);
     const onDurationChange = () => setDuration(video.duration);
     const onEnded = () => setIsPlaying(false);
-
     video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("durationchange", onDurationChange);
     video.addEventListener("ended", onEnded);
@@ -59,6 +110,7 @@ export const VideoAnnotationTool = () => {
       if (!file) return;
       if (videoSrc) URL.revokeObjectURL(videoSrc);
       const url = URL.createObjectURL(file);
+      setVideoFile(file);
       setVideoSrc(url);
       setVideoName(file.name);
       setSegments([]);
@@ -73,13 +125,8 @@ export const VideoAnnotationTool = () => {
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) {
-      video.play();
-      setIsPlaying(true);
-    } else {
-      video.pause();
-      setIsPlaying(false);
-    }
+    if (video.paused) { video.play(); setIsPlaying(true); }
+    else { video.pause(); setIsPlaying(false); }
   }, []);
 
   const handleTimelineClick = useCallback(
@@ -98,14 +145,8 @@ export const VideoAnnotationTool = () => {
   }, [currentTime]);
 
   const handleMarkEnd = useCallback(() => {
-    if (markStart === null) {
-      toast.error("Mark start time first");
-      return;
-    }
-    if (currentTime <= markStart) {
-      toast.error("End time must be after start time");
-      return;
-    }
+    if (markStart === null) { toast.error("Mark start time first"); return; }
+    if (currentTime <= markStart) { toast.error("End time must be after start time"); return; }
     const segment: VideoSegment = {
       id: crypto.randomUUID(),
       startTime: markStart,
@@ -121,9 +162,7 @@ export const VideoAnnotationTool = () => {
 
   const updateSegmentLabel = useCallback(
     (id: string, field: "labelKhmer" | "labelEnglish", value: string) => {
-      setSegments((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))
-      );
+      setSegments((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
     },
     []
   );
@@ -134,9 +173,7 @@ export const VideoAnnotationTool = () => {
   }, []);
 
   const seekToSegment = useCallback((seg: VideoSegment) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = seg.startTime;
-    }
+    if (videoRef.current) videoRef.current.currentTime = seg.startTime;
   }, []);
 
   const playSegment = useCallback((seg: VideoSegment) => {
@@ -145,7 +182,6 @@ export const VideoAnnotationTool = () => {
     video.currentTime = seg.startTime;
     video.play();
     setIsPlaying(true);
-
     const checkEnd = () => {
       if (video.currentTime >= seg.endTime) {
         video.pause();
@@ -156,14 +192,53 @@ export const VideoAnnotationTool = () => {
     video.addEventListener("timeupdate", checkEnd);
   }, []);
 
-  const handleExport = useCallback(() => {
-    if (segments.length === 0) {
-      toast.error("No segments to export");
-      return;
+  const handleExportZip = useCallback(async () => {
+    if (segments.length === 0) { toast.error("No segments to export"); return; }
+    if (!videoFile) { toast.error("No video file loaded"); return; }
+
+    setIsExporting(true);
+    try {
+      const zip = new JSZip();
+      const speechFolder = zip.folder("speech")!;
+
+      let labelLines: string[] = [];
+
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        const cropName = `crop${i + 1}`;
+        toast.info(`Extracting ${cropName}... (${i + 1}/${segments.length})`);
+
+        const wavData = await extractAudioSegment(videoFile, seg.startTime, seg.endTime);
+        speechFolder.file(`${cropName}.wav`, wavData);
+
+        const label = seg.labelKhmer || seg.labelEnglish || "(no label)";
+        labelLines.push(`speech/${cropName} : ${label}`);
+      }
+
+      zip.file("labels.txt", labelLines.join("\n"));
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${videoName.replace(/\.[^/.]+$/, "")}_annotations.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${segments.length} segments as ZIP`);
+    } catch (err) {
+      console.error("Export failed:", err);
+      toast.error("Export failed. The browser may not support this video's audio format.");
+    } finally {
+      setIsExporting(false);
     }
+  }, [segments, videoFile, videoName]);
+
+  const handleExportJSON = useCallback(() => {
+    if (segments.length === 0) { toast.error("No segments to export"); return; }
     const exportData = {
       videoName,
-      segments: segments.map((s) => ({
+      segments: segments.map((s, i) => ({
+        cropName: `crop${i + 1}`,
         startTime: Number(s.startTime.toFixed(3)),
         endTime: Number(s.endTime.toFixed(3)),
         duration: Number((s.endTime - s.startTime).toFixed(3)),
@@ -173,16 +248,14 @@ export const VideoAnnotationTool = () => {
       exportedAt: new Date().toISOString(),
       totalSegments: segments.length,
     };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: "application/json",
-    });
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `${videoName.replace(/\.[^/.]+$/, "")}_annotations.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success(`Exported ${segments.length} segments`);
+    toast.success(`Exported ${segments.length} segments as JSON`);
   }, [segments, videoName]);
 
   return (
@@ -190,32 +263,28 @@ export const VideoAnnotationTool = () => {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate(`/project/${projectId}`)}
-          >
+          <Button variant="ghost" size="icon" onClick={() => navigate(`/project/${projectId}`)}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-sm">S</span>
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-foreground">
-              Speech-to-Text Annotation
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Crop video segments and add Khmer/English labels
-            </p>
+            <h1 className="text-lg font-semibold text-foreground">Speech-to-Text Annotation</h1>
+            <p className="text-xs text-muted-foreground">Crop video segments, add labels, export as WAV + labels</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
             {segments.length} segment{segments.length !== 1 ? "s" : ""}
           </span>
-          <Button onClick={handleExport} disabled={segments.length === 0} size="sm">
+          <Button onClick={handleExportJSON} disabled={segments.length === 0} size="sm" variant="outline">
             <Download className="w-4 h-4 mr-2" />
-            Export JSON
+            JSON
+          </Button>
+          <Button onClick={handleExportZip} disabled={segments.length === 0 || isExporting} size="sm">
+            {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            {isExporting ? "Exporting..." : "Export ZIP"}
           </Button>
         </div>
       </header>
@@ -228,42 +297,25 @@ export const VideoAnnotationTool = () => {
               <label className="cursor-pointer">
                 <div className="border-2 border-dashed border-border rounded-xl p-16 text-center hover:border-primary/50 transition-colors">
                   <Upload className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                  <p className="text-lg font-medium text-foreground mb-1">
-                    Upload a Video
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    MP4, WebM, or OGG format
-                  </p>
+                  <p className="text-lg font-medium text-foreground mb-1">Upload a Video</p>
+                  <p className="text-sm text-muted-foreground">MP4, WebM, or OGG format</p>
                 </div>
-                <input
-                  type="file"
-                  accept="video/*"
-                  onChange={handleVideoUpload}
-                  className="hidden"
-                />
+                <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
               </label>
             </div>
           ) : (
             <>
-              {/* Video player */}
               <div className="flex-1 flex items-center justify-center bg-black/90 p-4 min-h-0">
-                <video
-                  ref={videoRef}
-                  src={videoSrc}
-                  className="max-w-full max-h-full rounded"
-                  onClick={togglePlay}
-                />
+                <video ref={videoRef} src={videoSrc} className="max-w-full max-h-full rounded" onClick={togglePlay} />
               </div>
 
               {/* Controls + Timeline */}
               <div className="border-t border-border bg-card px-4 py-3 space-y-3">
-                {/* Timeline */}
                 <div
                   ref={timelineRef}
                   className="relative h-10 bg-muted rounded cursor-pointer group"
                   onClick={handleTimelineClick}
                 >
-                  {/* Segments on timeline */}
                   {segments.map((seg, i) => (
                     <div
                       key={seg.id}
@@ -273,10 +325,9 @@ export const VideoAnnotationTool = () => {
                         width: `${((seg.endTime - seg.startTime) / duration) * 100}%`,
                         backgroundColor: `hsl(${(i * 60) % 360}, 70%, 50%)`,
                       }}
-                      title={`Segment ${i + 1}: ${formatTime(seg.startTime)} → ${formatTime(seg.endTime)}`}
+                      title={`Crop ${i + 1}: ${formatTime(seg.startTime)} → ${formatTime(seg.endTime)}`}
                     />
                   ))}
-                  {/* Mark start indicator */}
                   {markStart !== null && (
                     <div
                       className="absolute top-0 h-full bg-primary/30 border-l-2 border-primary"
@@ -286,64 +337,34 @@ export const VideoAnnotationTool = () => {
                       }}
                     />
                   )}
-                  {/* Playhead */}
                   <div
                     className="absolute top-0 h-full w-0.5 bg-foreground z-10"
                     style={{ left: `${(currentTime / duration) * 100}%` }}
                   />
                 </div>
 
-                {/* Controls */}
                 <div className="flex items-center gap-3">
                   <Button variant="outline" size="icon" onClick={togglePlay}>
-                    {isPlaying ? (
-                      <Pause className="w-4 h-4" />
-                    ) : (
-                      <Play className="w-4 h-4" />
-                    )}
+                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                   </Button>
                   <span className="text-sm font-mono text-muted-foreground min-w-[120px]">
                     {formatTime(currentTime)} / {formatTime(duration)}
                   </span>
-
                   <div className="flex-1" />
-
-                  <Button
-                    variant={markStart !== null ? "default" : "outline"}
-                    size="sm"
-                    onClick={handleMarkStart}
-                  >
-                    <Scissors className="w-4 h-4 mr-1" />
-                    Mark Start
+                  <Button variant={markStart !== null ? "default" : "outline"} size="sm" onClick={handleMarkStart}>
+                    <Scissors className="w-4 h-4 mr-1" />Mark Start
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleMarkEnd}
-                    disabled={markStart === null}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Mark End
+                  <Button variant="outline" size="sm" onClick={handleMarkEnd} disabled={markStart === null}>
+                    <Plus className="w-4 h-4 mr-1" />Mark End
                   </Button>
                   {markStart !== null && (
-                    <span className="text-xs text-muted-foreground">
-                      Start: {formatTime(markStart)}
-                    </span>
+                    <span className="text-xs text-muted-foreground">Start: {formatTime(markStart)}</span>
                   )}
-
                   <label className="cursor-pointer">
                     <Button variant="ghost" size="sm" asChild>
-                      <span>
-                        <Upload className="w-4 h-4 mr-1" />
-                        Change Video
-                      </span>
+                      <span><Upload className="w-4 h-4 mr-1" />Change Video</span>
                     </Button>
-                    <input
-                      type="file"
-                      accept="video/*"
-                      onChange={handleVideoUpload}
-                      className="hidden"
-                    />
+                    <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
                   </label>
                 </div>
               </div>
@@ -354,15 +375,12 @@ export const VideoAnnotationTool = () => {
         {/* Right sidebar — Segment list */}
         <aside className="w-80 border-l border-border bg-sidebar flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
-            <h3 className="font-semibold text-foreground text-sm">
-              Segments ({segments.length})
-            </h3>
+            <h3 className="font-semibold text-foreground text-sm">Segments ({segments.length})</h3>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {segments.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
-                Use Mark Start / Mark End to create segments from the video
-                timeline.
+                Use Mark Start / Mark End to crop segments from the video timeline.
               </p>
             ) : (
               segments.map((seg, i) => (
@@ -375,78 +393,42 @@ export const VideoAnnotationTool = () => {
                     <div className="flex items-center justify-between">
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded"
-                        style={{
-                          backgroundColor: `hsl(${(i * 60) % 360}, 70%, 50%)`,
-                          color: "white",
-                        }}
+                        style={{ backgroundColor: `hsl(${(i * 60) % 360}, 70%, 50%)`, color: "white" }}
                       >
-                        #{i + 1}
+                        Crop {i + 1}
                       </span>
                       <span className="text-xs text-muted-foreground font-mono">
                         {formatTime(seg.startTime)} → {formatTime(seg.endTime)}
                       </span>
                     </div>
                     <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-xs h-6 px-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          seekToSegment(seg);
-                        }}
-                      >
+                      <Button variant="ghost" size="sm" className="text-xs h-6 px-2" onClick={(e) => { e.stopPropagation(); seekToSegment(seg); }}>
                         Seek
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-xs h-6 px-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          playSegment(seg);
-                        }}
-                      >
-                        <Play className="w-3 h-3 mr-1" />
-                        Play
+                      <Button variant="ghost" size="sm" className="text-xs h-6 px-2" onClick={(e) => { e.stopPropagation(); playSegment(seg); }}>
+                        <Play className="w-3 h-3 mr-1" />Play
                       </Button>
                       <div className="flex-1" />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteSegment(seg.id);
-                        }}
-                      >
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); deleteSegment(seg.id); }}>
                         <Trash2 className="w-3 h-3 text-destructive" />
                       </Button>
                     </div>
                     <div className="space-y-1.5">
                       <div>
-                        <label className="text-[10px] uppercase text-muted-foreground font-medium">
-                          Khmer (ខ្មែរ)
-                        </label>
+                        <label className="text-[10px] uppercase text-muted-foreground font-medium">Khmer (ខ្មែរ)</label>
                         <Input
                           value={seg.labelKhmer}
-                          onChange={(e) =>
-                            updateSegmentLabel(seg.id, "labelKhmer", e.target.value)
-                          }
+                          onChange={(e) => updateSegmentLabel(seg.id, "labelKhmer", e.target.value)}
                           placeholder="វាយអក្សរខ្មែរ..."
                           className="h-8 text-sm"
                           onClick={(e) => e.stopPropagation()}
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] uppercase text-muted-foreground font-medium">
-                          English
-                        </label>
+                        <label className="text-[10px] uppercase text-muted-foreground font-medium">English</label>
                         <Input
                           value={seg.labelEnglish}
-                          onChange={(e) =>
-                            updateSegmentLabel(seg.id, "labelEnglish", e.target.value)
-                          }
+                          onChange={(e) => updateSegmentLabel(seg.id, "labelEnglish", e.target.value)}
                           placeholder="Type English text..."
                           className="h-8 text-sm"
                           onClick={(e) => e.stopPropagation()}
@@ -463,23 +445,13 @@ export const VideoAnnotationTool = () => {
 
       {/* Status bar */}
       <footer className="px-4 py-2 border-t border-border bg-card text-xs text-muted-foreground flex items-center gap-4">
-        <span>
-          Video:{" "}
-          <span className="text-foreground font-medium">
-            {videoName || "None"}
-          </span>
-        </span>
+        <span>Video: <span className="text-foreground font-medium">{videoName || "None"}</span></span>
         <span>|</span>
-        <span>
-          Segments:{" "}
-          <span className="text-foreground font-medium">{segments.length}</span>
-        </span>
+        <span>Segments: <span className="text-foreground font-medium">{segments.length}</span></span>
         {markStart !== null && (
           <>
             <span>|</span>
-            <span className="text-primary font-medium">
-              Recording from {formatTime(markStart)}...
-            </span>
+            <span className="text-primary font-medium">Recording from {formatTime(markStart)}...</span>
           </>
         )}
       </footer>
