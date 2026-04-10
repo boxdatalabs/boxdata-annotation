@@ -155,7 +155,8 @@ export const VideoAnnotationTool = () => {
     };
     setSegments((prev) => [...prev, segment]);
     setEditingSegmentId(segment.id);
-    setMarkStart(null);
+    // Auto-set next mark start to this segment's end
+    setMarkStart(currentTime);
     toast.success(`Segment created: ${formatTime(segment.startTime)} → ${formatTime(segment.endTime)}`);
   }, [markStart, currentTime]);
 
