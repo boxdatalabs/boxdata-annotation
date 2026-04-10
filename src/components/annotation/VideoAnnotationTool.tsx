@@ -151,8 +151,7 @@ export const VideoAnnotationTool = () => {
       id: crypto.randomUUID(),
       startTime: markStart,
       endTime: currentTime,
-      labelKhmer: "",
-      labelEnglish: "",
+      label: "",
     };
     setSegments((prev) => [...prev, segment]);
     setEditingSegmentId(segment.id);
@@ -161,8 +160,8 @@ export const VideoAnnotationTool = () => {
   }, [markStart, currentTime]);
 
   const updateSegmentLabel = useCallback(
-    (id: string, field: "labelKhmer" | "labelEnglish", value: string) => {
-      setSegments((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
+    (id: string, value: string) => {
+      setSegments((prev) => prev.map((s) => (s.id === id ? { ...s, label: value } : s)));
     },
     []
   );
@@ -211,7 +210,7 @@ export const VideoAnnotationTool = () => {
         const wavData = await extractAudioSegment(videoFile, seg.startTime, seg.endTime);
         speechFolder.file(`${cropName}.wav`, wavData);
 
-        const label = seg.labelKhmer || seg.labelEnglish || "(no label)";
+        const label = seg.label || "(no label)";
         labelLines.push(`speech/${cropName} : ${label}`);
       }
 
@@ -242,8 +241,7 @@ export const VideoAnnotationTool = () => {
         startTime: Number(s.startTime.toFixed(3)),
         endTime: Number(s.endTime.toFixed(3)),
         duration: Number((s.endTime - s.startTime).toFixed(3)),
-        labelKhmer: s.labelKhmer,
-        labelEnglish: s.labelEnglish,
+        label: s.label,
       })),
       exportedAt: new Date().toISOString(),
       totalSegments: segments.length,
@@ -413,27 +411,15 @@ export const VideoAnnotationTool = () => {
                         <Trash2 className="w-3 h-3 text-destructive" />
                       </Button>
                     </div>
-                    <div className="space-y-1.5">
-                      <div>
-                        <label className="text-[10px] uppercase text-muted-foreground font-medium">Khmer (ខ្មែរ)</label>
-                        <Input
-                          value={seg.labelKhmer}
-                          onChange={(e) => updateSegmentLabel(seg.id, "labelKhmer", e.target.value)}
-                          placeholder="វាយអក្សរខ្មែរ..."
-                          className="h-8 text-sm"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase text-muted-foreground font-medium">English</label>
-                        <Input
-                          value={seg.labelEnglish}
-                          onChange={(e) => updateSegmentLabel(seg.id, "labelEnglish", e.target.value)}
-                          placeholder="Type English text..."
-                          className="h-8 text-sm"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
+                    <div>
+                      <label className="text-[10px] uppercase text-muted-foreground font-medium">Label</label>
+                      <Input
+                        value={seg.label}
+                        onChange={(e) => updateSegmentLabel(seg.id, e.target.value)}
+                        placeholder="វាយអក្សរ / Type label..."
+                        className="h-8 text-sm"
+                        onClick={(e) => e.stopPropagation()}
+                      />
                     </div>
                   </CardContent>
                 </Card>

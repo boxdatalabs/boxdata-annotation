@@ -59,8 +59,7 @@ export interface VideoSegment {
   id: string;
   startTime: number; // seconds
   endTime: number; // seconds
-  labelKhmer: string;
-  labelEnglish: string;
+  label: string;
 }
 
 export interface StoredImage {
