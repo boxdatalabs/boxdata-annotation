@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTasks } from "@/hooks/useTasks";
-import { TaskType } from "@/types/annotation";
+import { TaskType, AnnotationKind } from "@/types/annotation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, FolderOpen, Trash2, Image, Tag, Clock, ArrowLeft, Video, FileText } from "lucide-react";
+import { Plus, FolderOpen, Trash2, Image, Tag, Clock, ArrowLeft, Video, FileText, Square, Hexagon, Spline, Dot } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -23,6 +23,7 @@ export const TaskList = () => {
   const { tasks, loading, addTask, removeTask } = useTasks(projectId!);
   const [newTaskName, setNewTaskName] = useState("");
   const [selectedType, setSelectedType] = useState<TaskType>("image");
+  const [selectedKind, setSelectedKind] = useState<AnnotationKind>("box");
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -31,10 +32,17 @@ export const TaskList = () => {
       toast.error("Please enter a task name");
       return;
     }
-    const task = await addTask(newTaskName.trim(), selectedType);
+    const task = await addTask(newTaskName.trim(), selectedType, selectedKind);
     setNewTaskName("");
     toast.success(`Task "${task.name}" created`);
   };
+
+  const annotationKinds: { kind: AnnotationKind; label: string; desc: string; Icon: typeof Square }[] = [
+    { kind: "box", label: "Bounding Box", desc: "Rectangles for object detection", Icon: Square },
+    { kind: "polygon", label: "Polygon", desc: "Multi-point outlines for irregular shapes", Icon: Hexagon },
+    { kind: "polyline", label: "Polyline", desc: "Connected lines for roads, paths, edges", Icon: Spline },
+    { kind: "point", label: "Point / Keypoint", desc: "Single point markers (eyes, joints)", Icon: Dot },
+  ];
 
   const handleDeleteTask = async () => {
     if (taskToDelete) {
@@ -126,6 +134,29 @@ export const TaskList = () => {
                 </div>
               </button>
             </div>
+
+            {selectedType === "image" && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Annotation Type</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {annotationKinds.map(({ kind, label, desc, Icon }) => (
+                    <button
+                      key={kind}
+                      onClick={() => setSelectedKind(kind)}
+                      className={`flex flex-col items-start gap-1 p-3 rounded-lg border-2 transition-colors text-left ${
+                        selectedKind === kind
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-muted-foreground/30"
+                      }`}
+                    >
+                      <Icon className="w-5 h-5 text-primary" />
+                      <p className="font-semibold text-foreground text-xs">{label}</p>
+                      <p className="text-[11px] text-muted-foreground leading-tight">{desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex gap-3">
               <Input
                 placeholder="Enter task name..."
@@ -173,7 +204,7 @@ export const TaskList = () => {
                             {task.name}
                           </h3>
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground uppercase font-medium">
-                            {task.type === "speech-to-text" ? "STT" : "Image"}
+                            {task.type === "speech-to-text" ? "STT" : (task.annotationKind ?? "box")}
                           </span>
                         </div>
                         <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">

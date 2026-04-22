@@ -1,4 +1,4 @@
-import { Task, Project, StoredImage, StoredAnnotations, StoredClasses, BoundingBox, AnnotationClass } from "@/types/annotation";
+import { Task, Project, StoredImage, StoredAnnotations, StoredClasses, BoundingBox, AnnotationClass, AnnotationKind } from "@/types/annotation";
 
 const DB_NAME = "yolo-annotator";
 const DB_VERSION = 2;
@@ -183,13 +183,19 @@ export async function getTask(id: string): Promise<Task | undefined> {
   });
 }
 
-export async function createTask(projectId: string, name: string, type: Task["type"] = "image"): Promise<Task> {
+export async function createTask(
+  projectId: string,
+  name: string,
+  type: Task["type"] = "image",
+  annotationKind: AnnotationKind = "box"
+): Promise<Task> {
   const db = await openDB();
   const task: Task = {
     id: crypto.randomUUID(),
     projectId,
     name,
     type,
+    annotationKind: type === "image" ? annotationKind : undefined,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };

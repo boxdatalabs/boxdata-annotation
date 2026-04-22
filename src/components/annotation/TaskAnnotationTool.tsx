@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTaskAnnotations } from "@/hooks/useTaskAnnotations";
+import { AnnotationKind, Task } from "@/types/annotation";
+import { getTask } from "@/lib/db";
 
 import { Toolbar } from "./Toolbar";
 import { ClassPanel } from "./ClassPanel";
@@ -11,6 +13,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import JSZip from "jszip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import { detectTextRegions, getGeminiApiKey } from "@/services/geminiOCR";
 
@@ -19,7 +29,16 @@ export const TaskAnnotationTool = () => {
   const navigate = useNavigate();
   const [tool, setTool] = useState<"select" | "draw">("draw");
   const [isAutoAnnotating, setIsAutoAnnotating] = useState(false);
+  const [task, setTask] = useState<Task | null>(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!taskId) return;
+    void getTask(taskId).then((t) => setTask(t ?? null));
+  }, [taskId]);
+
+  const annotationKind: AnnotationKind = (task?.annotationKind as AnnotationKind) ?? "box";
 
   const {
     images,
@@ -43,6 +62,7 @@ export const TaskAnnotationTool = () => {
     addClass,
     deleteClass,
     exportToYOLO,
+    exportToJSON,
     importFromYOLO,
     getAnnotationCount,
     getTotalAnnotations,
@@ -89,53 +109,70 @@ export const TaskAnnotationTool = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedAnnotationId, deleteAnnotation, setSelectedAnnotationId, currentImageIndex, images.length, setCurrentImageIndex]);
 
-  const handleExport = useCallback(async () => {
+  const runExport = useCallback(async (format: "yolo" | "json") => {
     if (images.length === 0) {
       toast.error("No images to export");
       return;
     }
-
     const annotatedImages = images.filter((img) => (imageAnnotations[img.id] || []).length > 0);
-
     if (annotatedImages.length === 0) {
       toast.error("No annotations to export");
       return;
     }
 
     const zip = new JSZip();
+    const jsonItems: unknown[] = [];
 
     for (let i = 0; i < annotatedImages.length; i++) {
       const image = annotatedImages[i];
       const baseName = `${i + 1}`;
-
-      // Get image extension
       const ext = image.name.split(".").pop()?.toLowerCase() || "png";
 
-      // Get blob from IndexedDB
       const blob = await getImageBlob(image.id);
-      if (blob) {
-        zip.file(`${baseName}.${ext}`, blob);
-      }
+      if (blob) zip.file(`${baseName}.${ext}`, blob);
 
-      // Add YOLO annotation file
-      const yoloContent = exportToYOLO(image.id);
-      zip.file(`${baseName}.txt`, yoloContent);
+      if (format === "yolo") {
+        zip.file(`${baseName}.txt`, exportToYOLO(image.id));
+      } else {
+        jsonItems.push(exportToJSON(image.id, image.name, image.width, image.height));
+      }
     }
 
-    // Add classes.txt
-    const classesContent = classes.map((c) => c.name).join("\n");
-    zip.file("classes.txt", classesContent);
+    if (format === "yolo") {
+      zip.file("classes.txt", classes.map((c) => c.name).join("\n"));
+    } else {
+      zip.file(
+        "annotations.json",
+        JSON.stringify(
+          {
+            kind: annotationKind,
+            classes: classes.map((c) => ({ id: c.id, name: c.name })),
+            images: jsonItems,
+          },
+          null,
+          2
+        )
+      );
+    }
 
     const content = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(content);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "annotations_yolo.zip";
+    a.download = `annotations_${format}.zip`;
     a.click();
     URL.revokeObjectURL(url);
 
-    toast.success(`Exported ${annotatedImages.length} images with annotations`);
-  }, [images, imageAnnotations, exportToYOLO, classes, getImageBlob]);
+    toast.success(`Exported ${annotatedImages.length} images (${format.toUpperCase()})`);
+  }, [images, imageAnnotations, exportToYOLO, exportToJSON, classes, getImageBlob, annotationKind]);
+
+  const handleExport = useCallback(() => {
+    if (images.length === 0) {
+      toast.error("No images to export");
+      return;
+    }
+    setExportDialogOpen(true);
+  }, [images.length]);
 
   const handleImport = useCallback(() => {
     importInputRef.current?.click();
@@ -220,7 +257,7 @@ export const TaskAnnotationTool = () => {
           </div>
           <div>
             <h1 className="text-lg font-semibold text-foreground">Task</h1>
-            <p className="text-xs text-muted-foreground">Image annotation for object detection</p>
+            <p className="text-xs text-muted-foreground capitalize">{annotationKind} annotation</p>
           </div>
         </div>
         <div className="text-sm text-muted-foreground flex items-center gap-4">
@@ -243,6 +280,7 @@ export const TaskAnnotationTool = () => {
         isAutoAnnotating={isAutoAnnotating}
         hasAnnotations={annotations.length > 0}
         hasImage={!!currentImage}
+        annotationKind={annotationKind}
       />
 
       {/* Main content */}
@@ -285,11 +323,47 @@ export const TaskAnnotationTool = () => {
           selectedClassId={selectedClassId}
           selectedAnnotationId={selectedAnnotationId}
           tool={tool}
+          annotationKind={annotationKind}
           onAddAnnotation={addAnnotation}
           onUpdateAnnotation={updateAnnotation}
           onSelectAnnotation={setSelectedAnnotationId}
         />
       </div>
+
+      {/* Export format dialog */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Choose export format</DialogTitle>
+            <DialogDescription>
+              Pick the format for your annotations. Both export images plus annotation files in a ZIP.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <button
+              onClick={() => { setExportDialogOpen(false); void runExport("yolo"); }}
+              className="flex flex-col items-start gap-2 p-4 rounded-lg border-2 border-border hover:border-primary transition-colors text-left"
+            >
+              <p className="font-semibold text-foreground">YOLO (.txt)</p>
+              <p className="text-xs text-muted-foreground">
+                Boxes, polygon segmentation, and keypoints in YOLO text format. Includes classes.txt.
+              </p>
+            </button>
+            <button
+              onClick={() => { setExportDialogOpen(false); void runExport("json"); }}
+              className="flex flex-col items-start gap-2 p-4 rounded-lg border-2 border-border hover:border-primary transition-colors text-left"
+            >
+              <p className="font-semibold text-foreground">JSON (COCO-style)</p>
+              <p className="text-xs text-muted-foreground">
+                Single annotations.json with all shapes (box, polygon, polyline, point) per image.
+              </p>
+            </button>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setExportDialogOpen(false)}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Hidden import input */}
       <input ref={importInputRef} type="file" accept=".txt" onChange={handleImportFile} className="hidden" />
@@ -297,7 +371,7 @@ export const TaskAnnotationTool = () => {
       {/* Status bar */}
       <footer className="px-4 py-2 border-t border-border bg-card text-xs text-muted-foreground flex items-center gap-4">
         <span>
-          Tool: <span className="text-foreground font-medium">{tool === "draw" ? "Draw Box" : "Select"}</span>
+          Tool: <span className="text-foreground font-medium capitalize">{tool === "draw" ? `Draw ${annotationKind}` : "Select"}</span>
         </span>
         <span>|</span>
         <span>

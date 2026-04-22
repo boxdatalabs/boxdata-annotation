@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { Task, TaskType } from "@/types/annotation";
+import { Task, TaskType, AnnotationKind } from "@/types/annotation";
 import { createTask, deleteTask, getProjectTasks, getTaskAnnotationCount, getTaskImageCount } from "@/lib/db";
 
 interface TaskWithCounts extends Task {
@@ -38,8 +38,8 @@ export const useTasks = (projectId: string) => {
     void loadTasks();
   }, [loadTasks]);
 
-  const addTask = useCallback((name: string, type: TaskType = "image") => {
-    return createTask(projectId, name, type).then((task) => {
+  const addTask = useCallback((name: string, type: TaskType = "image", annotationKind: AnnotationKind = "box") => {
+    return createTask(projectId, name, type, annotationKind).then((task) => {
       setTasks((prev) => [{ ...task, imageCount: 0, annotationCount: 0 }, ...prev]);
       return task;
     });

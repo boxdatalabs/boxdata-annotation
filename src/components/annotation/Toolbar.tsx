@@ -1,7 +1,8 @@
-import { MousePointer2, Square, Trash2, Download, Upload, RotateCcw, Wand2, Loader2 } from "lucide-react";
+import { MousePointer2, Square, Hexagon, Spline, Dot, Trash2, Download, Upload, RotateCcw, Wand2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ApiKeySettings } from "./ApiKeySettings";
+import { AnnotationKind } from "@/types/annotation";
 
 interface ToolbarProps {
   tool: "select" | "draw";
@@ -13,6 +14,7 @@ interface ToolbarProps {
   isAutoAnnotating?: boolean;
   hasAnnotations: boolean;
   hasImage: boolean;
+  annotationKind?: AnnotationKind;
 }
 
 export const Toolbar = ({
@@ -25,7 +27,18 @@ export const Toolbar = ({
   isAutoAnnotating,
   hasAnnotations,
   hasImage,
+  annotationKind = "box",
 }: ToolbarProps) => {
+  const drawIcon =
+    annotationKind === "polygon" ? <Hexagon className="w-4 h-4" /> :
+    annotationKind === "polyline" ? <Spline className="w-4 h-4" /> :
+    annotationKind === "point" ? <Dot className="w-4 h-4" /> :
+    <Square className="w-4 h-4" />;
+  const drawLabel =
+    annotationKind === "polygon" ? "Draw Polygon (B)" :
+    annotationKind === "polyline" ? "Draw Polyline (B)" :
+    annotationKind === "point" ? "Place Point (B)" :
+    "Draw Box (B)";
   return (
     <div className="flex items-center gap-1 p-2 bg-card border-b border-border">
       <div className="flex items-center gap-1 pr-3 border-r border-border">
@@ -47,10 +60,10 @@ export const Toolbar = ({
               onClick={() => onToolChange("draw")}
               className={`toolbar-btn ${tool === "draw" ? "toolbar-btn-active" : ""}`}
             >
-              <Square className="w-4 h-4" />
+              {drawIcon}
             </button>
           </TooltipTrigger>
-          <TooltipContent>Draw Box (B)</TooltipContent>
+          <TooltipContent>{drawLabel}</TooltipContent>
         </Tooltip>
       </div>
 
@@ -111,7 +124,7 @@ export const Toolbar = ({
         className="gap-2"
       >
         <Download className="w-4 h-4" />
-        Export YOLO
+        Export
       </Button>
     </div>
   );

@@ -40,6 +40,11 @@ export const AnnotationList = ({
       <div className="p-3 space-y-1.5">
         {annotations.map((ann, index) => {
           const cls = getClass(ann.classId);
+          const kind = ann.kind ?? "box";
+          const coordLabel =
+            kind === "box"
+              ? `${(ann.x ?? 0).toFixed(3)}, ${(ann.y ?? 0).toFixed(3)}`
+              : `${(ann.points?.length ?? 0)} pts`;
           return (
             <div
               key={ann.id}
@@ -57,7 +62,8 @@ export const AnnotationList = ({
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{cls.name}</div>
                 <div className="text-xs text-muted-foreground font-mono">
-                  {ann.x.toFixed(3)}, {ann.y.toFixed(3)}
+                  <span className="uppercase mr-1">{kind}</span>
+                  {coordLabel}
                 </div>
               </div>
               <span className="text-xs text-muted-foreground">#{index + 1}</span>
