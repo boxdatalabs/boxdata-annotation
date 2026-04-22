@@ -257,7 +257,7 @@ export const TaskAnnotationTool = () => {
           </div>
           <div>
             <h1 className="text-lg font-semibold text-foreground">Task</h1>
-            <p className="text-xs text-muted-foreground">Image annotation for object detection</p>
+            <p className="text-xs text-muted-foreground capitalize">{annotationKind} annotation</p>
           </div>
         </div>
         <div className="text-sm text-muted-foreground flex items-center gap-4">
@@ -280,6 +280,7 @@ export const TaskAnnotationTool = () => {
         isAutoAnnotating={isAutoAnnotating}
         hasAnnotations={annotations.length > 0}
         hasImage={!!currentImage}
+        annotationKind={annotationKind}
       />
 
       {/* Main content */}
