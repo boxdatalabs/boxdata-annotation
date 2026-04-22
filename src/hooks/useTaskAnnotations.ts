@@ -273,24 +273,73 @@ export const useTaskAnnotations = (taskId: string) => {
   const exportToYOLO = useCallback((imageId: string) => {
     const anns = imageAnnotations[imageId] || [];
     return anns
-      .map((ann) => `${ann.classId} ${ann.x.toFixed(6)} ${ann.y.toFixed(6)} ${ann.width.toFixed(6)} ${ann.height.toFixed(6)}`)
+      .map((ann) => {
+        const kind = ann.kind ?? "box";
+        if (kind === "box") {
+          return `${ann.classId} ${(ann.x ?? 0).toFixed(6)} ${(ann.y ?? 0).toFixed(6)} ${(ann.width ?? 0).toFixed(6)} ${(ann.height ?? 0).toFixed(6)}`;
+        }
+        if (kind === "point") {
+          // YOLO keypoint-ish: classId x y (visibility=2)
+          const p = ann.points?.[0];
+          if (!p) return "";
+          return `${ann.classId} ${p.x.toFixed(6)} ${p.y.toFixed(6)} 2`;
+        }
+        // polygon / polyline → YOLO segmentation format: classId x1 y1 x2 y2 ...
+        const flat = (ann.points ?? []).map((p) => `${p.x.toFixed(6)} ${p.y.toFixed(6)}`).join(" ");
+        return `${ann.classId} ${flat}`;
+      })
+      .filter(Boolean)
       .join("\n");
   }, [imageAnnotations]);
+
+  const exportToJSON = useCallback((imageId: string, imageName: string, imageWidth: number, imageHeight: number) => {
+    const anns = imageAnnotations[imageId] || [];
+    return {
+      image: imageName,
+      width: imageWidth,
+      height: imageHeight,
+      annotations: anns.map((ann) => {
+        const kind = ann.kind ?? "box";
+        const cls = classes.find((c) => c.id === ann.classId);
+        const base = {
+          id: ann.id,
+          classId: ann.classId,
+          className: cls?.name ?? null,
+          kind,
+        };
+        if (kind === "box") {
+          return { ...base, x: ann.x, y: ann.y, width: ann.width, height: ann.height };
+        }
+        return { ...base, points: ann.points ?? [] };
+      }),
+    };
+  }, [imageAnnotations, classes]);
 
   const importFromYOLO = useCallback((content: string) => {
     if (!currentImage) return;
     const lines = content.trim().split("\n").filter((line) => line.trim());
-    const newAnnotations: BoundingBox[] = lines.map((line) => {
+    const newAnnotations: BoundingBox[] = [];
+    for (const line of lines) {
       const parts = line.trim().split(/\s+/);
-      return {
-        id: crypto.randomUUID(),
-        classId: parseInt(parts[0], 10),
-        x: parseFloat(parts[1]),
-        y: parseFloat(parts[2]),
-        width: parseFloat(parts[3]),
-        height: parseFloat(parts[4]),
-      };
-    });
+      if (parts.length < 5) continue;
+      const classId = parseInt(parts[0], 10);
+      if (isNaN(classId)) continue;
+      // Box format: classId x y w h (5 tokens)
+      if (parts.length === 5) {
+        const [x, y, w, h] = parts.slice(1).map(parseFloat);
+        if ([x, y, w, h].some(isNaN)) continue;
+        newAnnotations.push({ id: crypto.randomUUID(), classId, kind: "box", x, y, width: w, height: h });
+      } else {
+        // Polygon/polyline: classId x1 y1 x2 y2 ...
+        const nums = parts.slice(1).map(parseFloat);
+        if (nums.some(isNaN) || nums.length % 2 !== 0) continue;
+        const points = [];
+        for (let i = 0; i < nums.length; i += 2) {
+          points.push({ x: nums[i], y: nums[i + 1] });
+        }
+        newAnnotations.push({ id: crypto.randomUUID(), classId, kind: "polygon", points });
+      }
+    }
     setImageAnnotations((prev) => ({ ...prev, [currentImage.id]: newAnnotations }));
     void persistAnnotationsForImage(currentImage.id, newAnnotations);
   }, [currentImage, persistAnnotationsForImage]);
