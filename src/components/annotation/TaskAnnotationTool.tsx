@@ -371,7 +371,7 @@ export const TaskAnnotationTool = () => {
       {/* Status bar */}
       <footer className="px-4 py-2 border-t border-border bg-card text-xs text-muted-foreground flex items-center gap-4">
         <span>
-          Tool: <span className="text-foreground font-medium">{tool === "draw" ? "Draw Box" : "Select"}</span>
+          Tool: <span className="text-foreground font-medium capitalize">{tool === "draw" ? `Draw ${annotationKind}` : "Select"}</span>
         </span>
         <span>|</span>
         <span>
