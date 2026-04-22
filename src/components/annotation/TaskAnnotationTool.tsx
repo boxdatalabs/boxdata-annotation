@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTaskAnnotations } from "@/hooks/useTaskAnnotations";
+import { AnnotationKind, Task } from "@/types/annotation";
+import { getTask } from "@/lib/db";
 
 import { Toolbar } from "./Toolbar";
 import { ClassPanel } from "./ClassPanel";
@@ -11,6 +13,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import JSZip from "jszip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import { detectTextRegions, getGeminiApiKey } from "@/services/geminiOCR";
 
@@ -19,7 +29,16 @@ export const TaskAnnotationTool = () => {
   const navigate = useNavigate();
   const [tool, setTool] = useState<"select" | "draw">("draw");
   const [isAutoAnnotating, setIsAutoAnnotating] = useState(false);
+  const [task, setTask] = useState<Task | null>(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!taskId) return;
+    void getTask(taskId).then((t) => setTask(t ?? null));
+  }, [taskId]);
+
+  const annotationKind: AnnotationKind = (task?.annotationKind as AnnotationKind) ?? "box";
 
   const {
     images,
