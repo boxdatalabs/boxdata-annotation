@@ -134,6 +134,29 @@ export const TaskList = () => {
                 </div>
               </button>
             </div>
+
+            {selectedType === "image" && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Annotation Type</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {annotationKinds.map(({ kind, label, desc, Icon }) => (
+                    <button
+                      key={kind}
+                      onClick={() => setSelectedKind(kind)}
+                      className={`flex flex-col items-start gap-1 p-3 rounded-lg border-2 transition-colors text-left ${
+                        selectedKind === kind
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-muted-foreground/30"
+                      }`}
+                    >
+                      <Icon className="w-5 h-5 text-primary" />
+                      <p className="font-semibold text-foreground text-xs">{label}</p>
+                      <p className="text-[11px] text-muted-foreground leading-tight">{desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex gap-3">
               <Input
                 placeholder="Enter task name..."
