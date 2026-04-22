@@ -1,10 +1,23 @@
+export type AnnotationKind = "box" | "polygon" | "polyline" | "point";
+
+export interface Point {
+  x: number; // normalized 0-1
+  y: number; // normalized 0-1
+}
+
+// Unified annotation shape. For "box": uses x,y,width,height (center + size, normalized).
+// For "polygon" / "polyline": uses points array. For "point": uses points with single entry.
 export interface BoundingBox {
   id: string;
   classId: number;
-  x: number; // normalized x center (0-1)
-  y: number; // normalized y center (0-1)
-  width: number; // normalized width (0-1)
-  height: number; // normalized height (0-1)
+  kind?: AnnotationKind; // defaults to "box" for back-compat
+  // Box fields
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  // Polygon / polyline / point fields
+  points?: Point[];
 }
 
 export interface AnnotationClass {
@@ -51,14 +64,15 @@ export interface Task {
   projectId: string;
   name: string;
   type: TaskType;
+  annotationKind?: AnnotationKind; // only for image tasks; default "box"
   createdAt: number;
   updatedAt: number;
 }
 
 export interface VideoSegment {
   id: string;
-  startTime: number; // seconds
-  endTime: number; // seconds
+  startTime: number;
+  endTime: number;
   label: string;
 }
 
