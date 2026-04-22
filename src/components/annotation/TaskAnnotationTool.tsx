@@ -322,11 +322,47 @@ export const TaskAnnotationTool = () => {
           selectedClassId={selectedClassId}
           selectedAnnotationId={selectedAnnotationId}
           tool={tool}
+          annotationKind={annotationKind}
           onAddAnnotation={addAnnotation}
           onUpdateAnnotation={updateAnnotation}
           onSelectAnnotation={setSelectedAnnotationId}
         />
       </div>
+
+      {/* Export format dialog */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Choose export format</DialogTitle>
+            <DialogDescription>
+              Pick the format for your annotations. Both export images plus annotation files in a ZIP.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <button
+              onClick={() => { setExportDialogOpen(false); void runExport("yolo"); }}
+              className="flex flex-col items-start gap-2 p-4 rounded-lg border-2 border-border hover:border-primary transition-colors text-left"
+            >
+              <p className="font-semibold text-foreground">YOLO (.txt)</p>
+              <p className="text-xs text-muted-foreground">
+                Boxes, polygon segmentation, and keypoints in YOLO text format. Includes classes.txt.
+              </p>
+            </button>
+            <button
+              onClick={() => { setExportDialogOpen(false); void runExport("json"); }}
+              className="flex flex-col items-start gap-2 p-4 rounded-lg border-2 border-border hover:border-primary transition-colors text-left"
+            >
+              <p className="font-semibold text-foreground">JSON (COCO-style)</p>
+              <p className="text-xs text-muted-foreground">
+                Single annotations.json with all shapes (box, polygon, polyline, point) per image.
+              </p>
+            </button>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setExportDialogOpen(false)}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Hidden import input */}
       <input ref={importInputRef} type="file" accept=".txt" onChange={handleImportFile} className="hidden" />
