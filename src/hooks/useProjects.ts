@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Project } from "@/types/annotation";
+import { createProject, deleteProject, getAllProjects, getProjectTaskCount } from "@/lib/db";
 
 interface ProjectWithCounts extends Project {
   taskCount: number;
@@ -7,21 +8,39 @@ interface ProjectWithCounts extends Project {
 
 export const useProjects = () => {
   const [projects, setProjects] = useState<ProjectWithCounts[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadProjects = useCallback(async () => {
+    setLoading(true);
+    try {
+      const storedProjects = await getAllProjects();
+      const projectsWithCounts = await Promise.all(
+        storedProjects.map(async (project) => ({
+          ...project,
+          taskCount: await getProjectTaskCount(project.id),
+        }))
+      );
+      setProjects(projectsWithCounts);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadProjects();
+  }, [loadProjects]);
 
   const addProject = useCallback((name: string, description?: string) => {
-    const project: Project = {
-      id: crypto.randomUUID(),
-      name,
-      description,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    setProjects((prev) => [{ ...project, taskCount: 0 }, ...prev]);
-    return project;
+    return createProject(name, description).then((project) => {
+      setProjects((prev) => [{ ...project, taskCount: 0 }, ...prev]);
+      return project;
+    });
   }, []);
 
   const removeProject = useCallback((id: string) => {
-    setProjects((prev) => prev.filter((p) => p.id !== id));
+    return deleteProject(id).then(() => {
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+    });
   }, []);
 
   const renameProject = useCallback((id: string, name: string) => {
@@ -48,7 +67,7 @@ export const useProjects = () => {
 
   return {
     projects,
-    loading: false,
+    loading,
     addProject,
     removeProject,
     renameProject,

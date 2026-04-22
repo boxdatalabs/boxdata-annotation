@@ -172,6 +172,11 @@ export const TaskAnnotationTool = () => {
       return;
     }
 
+    if (selectedClassId === null) {
+      toast.error("Create a class first");
+      return;
+    }
+
     if (!getGeminiApiKey()) {
       toast.error("Please configure your Gemini API key first (click the settings icon)");
       return;
@@ -297,7 +302,9 @@ export const TaskAnnotationTool = () => {
         <span>|</span>
         <span>
           Class:{" "}
-          <span className="text-foreground font-medium">{classes.find((c) => c.id === selectedClassId)?.name}</span>
+          <span className="text-foreground font-medium">
+            {classes.find((c) => c.id === selectedClassId)?.name ?? "Create a class"}
+          </span>
         </span>
         {currentImage && (
           <>

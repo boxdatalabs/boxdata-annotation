@@ -1,38 +1,156 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   BoundingBox,
   AnnotationClass,
+  CLASS_COLORS,
   ImageData,
   ImageAnnotations,
-  DEFAULT_CLASSES,
 } from "@/types/annotation";
+import {
+  addImage,
+  deleteImage as deleteStoredImage,
+  getTaskAnnotations,
+  getTaskClasses,
+  getTaskImages,
+  saveAnnotations,
+  saveClasses,
+} from "@/lib/db";
 
-export const useTaskAnnotations = (_taskId: string) => {
+const FALLBACK_CLASS_ID = -1;
+
+export const useTaskAnnotations = (taskId: string) => {
   const [images, setImages] = useState<ImageData[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
   const [imageAnnotations, setImageAnnotations] = useState<ImageAnnotations>({});
-  const [classes, setClasses] = useState<AnnotationClass[]>([...DEFAULT_CLASSES]);
-  const [selectedClassId, setSelectedClassId] = useState<number>(0);
+  const [classes, setClasses] = useState<AnnotationClass[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const objectUrlsRef = useRef<Record<string, string>>({});
 
   const currentImage = images[currentImageIndex] || null;
   const annotations = currentImage ? (imageAnnotations[currentImage.id] || []) : [];
 
-  const addImages = useCallback((newImages: ImageData[]) => {
-    setImages((prev) => {
-      const existingIds = new Set(prev.map((img) => img.id));
-      const unique = newImages.filter((img) => !existingIds.has(img.id));
-      return [...prev, ...unique];
-    });
+  const revokeImageUrl = useCallback((imageId: string) => {
+    const url = objectUrlsRef.current[imageId];
+    if (url) {
+      URL.revokeObjectURL(url);
+      delete objectUrlsRef.current[imageId];
+    }
   }, []);
+
+  const persistAnnotationsForImage = useCallback(
+    async (imageId: string, nextAnnotations: BoundingBox[]) => {
+      if (!taskId) return;
+      await saveAnnotations(imageId, taskId, nextAnnotations);
+    },
+    [taskId]
+  );
+
+  const persistClassesForTask = useCallback(
+    async (nextClasses: AnnotationClass[]) => {
+      if (!taskId) return;
+      await saveClasses(taskId, nextClasses);
+    },
+    [taskId]
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTaskData = async () => {
+      if (!taskId) {
+        if (!isMounted) return;
+        setImages([]);
+        setImageAnnotations({});
+        setClasses([]);
+        setSelectedClassId(null);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const [storedImages, storedAnnotations, storedClasses] = await Promise.all([
+          getTaskImages(taskId),
+          getTaskAnnotations(taskId),
+          getTaskClasses(taskId),
+        ]);
+
+        if (!isMounted) return;
+
+        Object.keys(objectUrlsRef.current).forEach((imageId) => revokeImageUrl(imageId));
+
+        const hydratedImages: ImageData[] = storedImages.map((image) => {
+          const src = URL.createObjectURL(image.blob);
+          objectUrlsRef.current[image.id] = src;
+
+          return {
+            id: image.id,
+            src,
+            name: image.name,
+            width: image.width,
+            height: image.height,
+          };
+        });
+
+        setImages(hydratedImages);
+        setImageAnnotations(storedAnnotations);
+        setClasses(storedClasses);
+        setSelectedClassId((prev) => {
+          if (storedClasses.length === 0) return null;
+          if (prev !== null && storedClasses.some((cls) => cls.id === prev)) return prev;
+          return storedClasses[0].id;
+        });
+        setCurrentImageIndex((prev) => Math.min(prev, Math.max(0, hydratedImages.length - 1)));
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadTaskData();
+
+    return () => {
+      isMounted = false;
+      Object.keys(objectUrlsRef.current).forEach((imageId) => revokeImageUrl(imageId));
+    };
+  }, [taskId, revokeImageUrl]);
+
+  useEffect(() => {
+    setCurrentImageIndex((prev) => Math.min(prev, Math.max(0, images.length - 1)));
+  }, [images.length]);
+
+  const addImages = useCallback(async (newImages: ImageData[]) => {
+    const existingIds = new Set(images.map((img) => img.id));
+    const unique = newImages.filter((img) => !existingIds.has(img.id));
+
+    if (unique.length === 0) return;
+
+    if (taskId) {
+      await Promise.all(
+        unique.map(async (image) => {
+          const blob = image.file ?? (await fetch(image.src).then((response) => response.blob()));
+          await addImage({
+            id: image.id,
+            taskId,
+            name: image.name,
+            width: image.width,
+            height: image.height,
+            blob,
+          });
+        })
+      );
+    }
+
+    setImages((prev) => [...prev, ...unique]);
+  }, [images, taskId]);
 
   const removeImage = useCallback((imageId: string) => {
     setImages((prev) => {
       const index = prev.findIndex((img) => img.id === imageId);
-      const img = prev.find((img) => img.id === imageId);
-      if (img?.src.startsWith("blob:")) {
-        URL.revokeObjectURL(img.src);
-      }
       const newImages = prev.filter((img) => img.id !== imageId);
       if (newImages.length === 0) {
         setCurrentImageIndex(0);
@@ -41,11 +159,17 @@ export const useTaskAnnotations = (_taskId: string) => {
       }
       return newImages;
     });
+
+    revokeImageUrl(imageId);
+    if (taskId) {
+      void deleteStoredImage(imageId);
+    }
+
     setImageAnnotations((prev) => {
       const { [imageId]: _, ...rest } = prev;
       return rest;
     });
-  }, [currentImageIndex]);
+  }, [currentImageIndex, revokeImageUrl, taskId]);
 
   const addAnnotation = useCallback((box: Omit<BoundingBox, "id">) => {
     if (!currentImage) return "";
@@ -53,68 +177,98 @@ export const useTaskAnnotations = (_taskId: string) => {
       ...box,
       id: crypto.randomUUID(),
     };
-    setImageAnnotations((prev) => ({
-      ...prev,
-      [currentImage.id]: [...(prev[currentImage.id] || []), newAnnotation],
-    }));
+    setImageAnnotations((prev) => {
+      const nextAnnotations = [...(prev[currentImage.id] || []), newAnnotation];
+      void persistAnnotationsForImage(currentImage.id, nextAnnotations);
+
+      return {
+        ...prev,
+        [currentImage.id]: nextAnnotations,
+      };
+    });
     setSelectedAnnotationId(newAnnotation.id);
     return newAnnotation.id;
-  }, [currentImage]);
+  }, [currentImage, persistAnnotationsForImage]);
 
   const updateAnnotation = useCallback((id: string, updates: Partial<BoundingBox>) => {
     if (!currentImage) return;
-    setImageAnnotations((prev) => ({
-      ...prev,
-      [currentImage.id]: (prev[currentImage.id] || []).map((ann) =>
+    setImageAnnotations((prev) => {
+      const nextAnnotations = (prev[currentImage.id] || []).map((ann) =>
         ann.id === id ? { ...ann, ...updates } : ann
-      ),
-    }));
-  }, [currentImage]);
+      );
+      void persistAnnotationsForImage(currentImage.id, nextAnnotations);
+
+      return {
+        ...prev,
+        [currentImage.id]: nextAnnotations,
+      };
+    });
+  }, [currentImage, persistAnnotationsForImage]);
 
   const deleteAnnotation = useCallback((id: string) => {
     if (!currentImage) return;
-    setImageAnnotations((prev) => ({
-      ...prev,
-      [currentImage.id]: (prev[currentImage.id] || []).filter((ann) => ann.id !== id),
-    }));
+    setImageAnnotations((prev) => {
+      const nextAnnotations = (prev[currentImage.id] || []).filter((ann) => ann.id !== id);
+      void persistAnnotationsForImage(currentImage.id, nextAnnotations);
+
+      return {
+        ...prev,
+        [currentImage.id]: nextAnnotations,
+      };
+    });
     if (selectedAnnotationId === id) {
       setSelectedAnnotationId(null);
     }
-  }, [currentImage, selectedAnnotationId]);
+  }, [currentImage, persistAnnotationsForImage, selectedAnnotationId]);
 
   const clearAnnotations = useCallback(() => {
     if (!currentImage) return;
     setImageAnnotations((prev) => ({ ...prev, [currentImage.id]: [] }));
     setSelectedAnnotationId(null);
-  }, [currentImage]);
+    void persistAnnotationsForImage(currentImage.id, []);
+  }, [currentImage, persistAnnotationsForImage]);
 
   const addClass = useCallback((name: string) => {
     const newId = classes.length > 0 ? Math.max(...classes.map(c => c.id)) + 1 : 0;
-    const colorIndex = newId % 8;
+    const colorIndex = newId % CLASS_COLORS.length;
     const newClass: AnnotationClass = {
       id: newId,
       name,
-      color: `hsl(var(--class-${colorIndex + 1}))`,
+      color: CLASS_COLORS[colorIndex],
     };
-    setClasses((prev) => [...prev, newClass]);
+    setClasses((prev) => {
+      const nextClasses = [...prev, newClass];
+      void persistClassesForTask(nextClasses);
+      return nextClasses;
+    });
+    setSelectedClassId((prev) => prev ?? newId);
     return newId;
-  }, [classes]);
+  }, [classes, persistClassesForTask]);
 
   const deleteClass = useCallback((id: number) => {
-    setClasses((prev) => prev.filter((c) => c.id !== id));
     setImageAnnotations((prev) => {
+      const fallbackClassId = classes.find((c) => c.id !== id)?.id ?? FALLBACK_CLASS_ID;
       const updated: ImageAnnotations = {};
       for (const imgId in prev) {
         updated[imgId] = prev[imgId].map((ann) =>
-          ann.classId === id ? { ...ann, classId: 0 } : ann
+          ann.classId === id && fallbackClassId !== FALLBACK_CLASS_ID
+            ? { ...ann, classId: fallbackClassId }
+            : ann
         );
+        void persistAnnotationsForImage(imgId, updated[imgId]);
       }
       return updated;
     });
+    setClasses((prev) => {
+      const nextClasses = prev.filter((c) => c.id !== id);
+      void persistClassesForTask(nextClasses);
+      return nextClasses;
+    });
     if (selectedClassId === id) {
-      setSelectedClassId(0);
+      const fallbackClassId = classes.find((c) => c.id !== id)?.id ?? null;
+      setSelectedClassId(fallbackClassId);
     }
-  }, [selectedClassId]);
+  }, [classes, persistAnnotationsForImage, persistClassesForTask, selectedClassId]);
 
   const exportToYOLO = useCallback((imageId: string) => {
     const anns = imageAnnotations[imageId] || [];
@@ -138,7 +292,8 @@ export const useTaskAnnotations = (_taskId: string) => {
       };
     });
     setImageAnnotations((prev) => ({ ...prev, [currentImage.id]: newAnnotations }));
-  }, [currentImage]);
+    void persistAnnotationsForImage(currentImage.id, newAnnotations);
+  }, [currentImage, persistAnnotationsForImage]);
 
   const getAnnotationCount = useCallback((imageId: string) => {
     return (imageAnnotations[imageId] || []).length;
@@ -168,7 +323,7 @@ export const useTaskAnnotations = (_taskId: string) => {
     classes,
     selectedClassId,
     selectedAnnotationId,
-    loading: false,
+    loading,
     setCurrentImageIndex,
     setSelectedClassId,
     setSelectedAnnotationId,

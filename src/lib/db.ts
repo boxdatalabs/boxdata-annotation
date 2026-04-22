@@ -1,4 +1,4 @@
-import { Task, Project, StoredImage, StoredAnnotations, StoredClasses, BoundingBox, AnnotationClass, DEFAULT_CLASSES } from "@/types/annotation";
+import { Task, Project, StoredImage, StoredAnnotations, StoredClasses, BoundingBox, AnnotationClass } from "@/types/annotation";
 
 const DB_NAME = "yolo-annotator";
 const DB_VERSION = 2;
@@ -183,13 +183,13 @@ export async function getTask(id: string): Promise<Task | undefined> {
   });
 }
 
-export async function createTask(projectId: string, name: string): Promise<Task> {
+export async function createTask(projectId: string, name: string, type: Task["type"] = "image"): Promise<Task> {
   const db = await openDB();
   const task: Task = {
     id: crypto.randomUUID(),
     projectId,
     name,
-    type: "image",
+    type,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -200,7 +200,7 @@ export async function createTask(projectId: string, name: string): Promise<Task>
     const classStore = transaction.objectStore("classes");
 
     taskStore.add(task);
-    classStore.add({ taskId: task.id, classes: DEFAULT_CLASSES });
+    classStore.add({ taskId: task.id, classes: [] });
 
     transaction.oncomplete = () => resolve(task);
     transaction.onerror = () => reject(transaction.error);
@@ -353,7 +353,7 @@ export async function getTaskClasses(taskId: string): Promise<AnnotationClass[]>
     const request = store.get(taskId);
     request.onsuccess = () => {
       const result = request.result as StoredClasses | undefined;
-      resolve(result?.classes || DEFAULT_CLASSES);
+      resolve(result?.classes || []);
     };
     request.onerror = () => reject(request.error);
   });

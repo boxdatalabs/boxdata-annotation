@@ -6,7 +6,7 @@ import { AnnotationClass } from "@/types/annotation";
 
 interface ClassPanelProps {
   classes: AnnotationClass[];
-  selectedClassId: number;
+  selectedClassId: number | null;
   onSelectClass: (id: number) => void;
   onAddClass: (name: string) => void;
   onDeleteClass: (id: number) => void;
