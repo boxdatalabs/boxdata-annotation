@@ -385,6 +385,7 @@ export const useTaskAnnotations = (taskId: string) => {
     addClass,
     deleteClass,
     exportToYOLO,
+    exportToJSON,
     importFromYOLO,
     getAnnotationCount,
     getTotalAnnotations,
