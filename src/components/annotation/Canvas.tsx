@@ -7,7 +7,7 @@ interface CanvasProps {
   image: ImageData | null;
   annotations: BoundingBox[];
   classes: AnnotationClass[];
-  selectedClassId: number;
+  selectedClassId: number | null;
   selectedAnnotationId: string | null;
   tool: "select" | "draw";
   onAddAnnotation: (box: Omit<BoundingBox, "id">) => void;
@@ -26,6 +26,12 @@ export const Canvas = ({
   onUpdateAnnotation,
   onSelectAnnotation,
 }: CanvasProps) => {
+  const fallbackClass: AnnotationClass = {
+    id: -1,
+    name: "Unassigned",
+    color: "hsl(var(--muted-foreground))",
+  };
+
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [drawing, setDrawing] = useState<DrawingState | null>(null);
@@ -155,6 +161,7 @@ export const Canvas = ({
       const pos = getMousePosition(e);
 
       if (tool === "draw") {
+        if (selectedClassId === null) return;
         setDrawing({
           isDrawing: true,
           startX: pos.x,
@@ -237,7 +244,7 @@ export const Canvas = ({
   );
 
   const getClass = (classId: number) => {
-    return classes.find((c) => c.id === classId) || classes[0];
+    return classes.find((c) => c.id === classId) || classes[0] || fallbackClass;
   };
 
   const getBoxStyle = (ann: BoundingBox) => {
@@ -253,7 +260,7 @@ export const Canvas = ({
   };
 
   const getDrawingStyle = () => {
-    if (!drawing) return {};
+    if (!drawing || selectedClassId === null) return {};
     const cls = getClass(selectedClassId);
     const minX = Math.min(drawing.startX, drawing.currentX);
     const maxX = Math.max(drawing.startX, drawing.currentX);

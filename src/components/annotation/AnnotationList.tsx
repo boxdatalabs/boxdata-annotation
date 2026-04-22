@@ -16,8 +16,14 @@ export const AnnotationList = ({
   onSelect,
   onDelete,
 }: AnnotationListProps) => {
+  const fallbackClass: AnnotationClass = {
+    id: -1,
+    name: "Unassigned",
+    color: "hsl(var(--muted-foreground))",
+  };
+
   const getClass = (classId: number) => {
-    return classes.find((c) => c.id === classId) || classes[0];
+    return classes.find((c) => c.id === classId) || classes[0] || fallbackClass;
   };
 
   if (annotations.length === 0) {
