@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTasks } from "@/hooks/useTasks";
-import { TaskType } from "@/types/annotation";
+import { TaskType, AnnotationKind } from "@/types/annotation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, FolderOpen, Trash2, Image, Tag, Clock, ArrowLeft, Video, FileText } from "lucide-react";
+import { Plus, FolderOpen, Trash2, Image, Tag, Clock, ArrowLeft, Video, FileText, Square, Hexagon, Spline, Dot } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -23,6 +23,7 @@ export const TaskList = () => {
   const { tasks, loading, addTask, removeTask } = useTasks(projectId!);
   const [newTaskName, setNewTaskName] = useState("");
   const [selectedType, setSelectedType] = useState<TaskType>("image");
+  const [selectedKind, setSelectedKind] = useState<AnnotationKind>("box");
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -31,10 +32,17 @@ export const TaskList = () => {
       toast.error("Please enter a task name");
       return;
     }
-    const task = await addTask(newTaskName.trim(), selectedType);
+    const task = await addTask(newTaskName.trim(), selectedType, selectedKind);
     setNewTaskName("");
     toast.success(`Task "${task.name}" created`);
   };
+
+  const annotationKinds: { kind: AnnotationKind; label: string; desc: string; Icon: typeof Square }[] = [
+    { kind: "box", label: "Bounding Box", desc: "Rectangles for object detection", Icon: Square },
+    { kind: "polygon", label: "Polygon", desc: "Multi-point outlines for irregular shapes", Icon: Hexagon },
+    { kind: "polyline", label: "Polyline", desc: "Connected lines for roads, paths, edges", Icon: Spline },
+    { kind: "point", label: "Point / Keypoint", desc: "Single point markers (eyes, joints)", Icon: Dot },
+  ];
 
   const handleDeleteTask = async () => {
     if (taskToDelete) {
