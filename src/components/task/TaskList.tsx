@@ -204,7 +204,7 @@ export const TaskList = () => {
                             {task.name}
                           </h3>
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground uppercase font-medium">
-                            {task.type === "speech-to-text" ? "STT" : "Image"}
+                            {task.type === "speech-to-text" ? "STT" : (task.annotationKind ?? "box")}
                           </span>
                         </div>
                         <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
