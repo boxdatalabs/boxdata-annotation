@@ -62,6 +62,7 @@ export const TaskAnnotationTool = () => {
     addClass,
     deleteClass,
     exportToYOLO,
+    exportToJSON,
     importFromYOLO,
     getAnnotationCount,
     getTotalAnnotations,
@@ -108,53 +109,70 @@ export const TaskAnnotationTool = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedAnnotationId, deleteAnnotation, setSelectedAnnotationId, currentImageIndex, images.length, setCurrentImageIndex]);
 
-  const handleExport = useCallback(async () => {
+  const runExport = useCallback(async (format: "yolo" | "json") => {
     if (images.length === 0) {
       toast.error("No images to export");
       return;
     }
-
     const annotatedImages = images.filter((img) => (imageAnnotations[img.id] || []).length > 0);
-
     if (annotatedImages.length === 0) {
       toast.error("No annotations to export");
       return;
     }
 
     const zip = new JSZip();
+    const jsonItems: unknown[] = [];
 
     for (let i = 0; i < annotatedImages.length; i++) {
       const image = annotatedImages[i];
       const baseName = `${i + 1}`;
-
-      // Get image extension
       const ext = image.name.split(".").pop()?.toLowerCase() || "png";
 
-      // Get blob from IndexedDB
       const blob = await getImageBlob(image.id);
-      if (blob) {
-        zip.file(`${baseName}.${ext}`, blob);
-      }
+      if (blob) zip.file(`${baseName}.${ext}`, blob);
 
-      // Add YOLO annotation file
-      const yoloContent = exportToYOLO(image.id);
-      zip.file(`${baseName}.txt`, yoloContent);
+      if (format === "yolo") {
+        zip.file(`${baseName}.txt`, exportToYOLO(image.id));
+      } else {
+        jsonItems.push(exportToJSON(image.id, image.name, image.width, image.height));
+      }
     }
 
-    // Add classes.txt
-    const classesContent = classes.map((c) => c.name).join("\n");
-    zip.file("classes.txt", classesContent);
+    if (format === "yolo") {
+      zip.file("classes.txt", classes.map((c) => c.name).join("\n"));
+    } else {
+      zip.file(
+        "annotations.json",
+        JSON.stringify(
+          {
+            kind: annotationKind,
+            classes: classes.map((c) => ({ id: c.id, name: c.name })),
+            images: jsonItems,
+          },
+          null,
+          2
+        )
+      );
+    }
 
     const content = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(content);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "annotations_yolo.zip";
+    a.download = `annotations_${format}.zip`;
     a.click();
     URL.revokeObjectURL(url);
 
-    toast.success(`Exported ${annotatedImages.length} images with annotations`);
-  }, [images, imageAnnotations, exportToYOLO, classes, getImageBlob]);
+    toast.success(`Exported ${annotatedImages.length} images (${format.toUpperCase()})`);
+  }, [images, imageAnnotations, exportToYOLO, exportToJSON, classes, getImageBlob, annotationKind]);
+
+  const handleExport = useCallback(() => {
+    if (images.length === 0) {
+      toast.error("No images to export");
+      return;
+    }
+    setExportDialogOpen(true);
+  }, [images.length]);
 
   const handleImport = useCallback(() => {
     importInputRef.current?.click();
