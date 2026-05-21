@@ -282,6 +282,16 @@ export const Canvas = ({
     if (kind === "box") {
       const left = ((ann.x ?? 0) - (ann.width ?? 0) / 2) * 100;
       const top = ((ann.y ?? 0) - (ann.height ?? 0) / 2) * 100;
+      const ax = (ann.x ?? 0);
+      const ay = (ann.y ?? 0);
+      const aw = (ann.width ?? 0);
+      const ah = (ann.height ?? 0);
+      const handles: { key: "nw" | "ne" | "sw" | "se"; style: React.CSSProperties; anchor: { x: number; y: number } }[] = [
+        { key: "nw", style: { top: -5, left: -5, cursor: "nwse-resize" }, anchor: { x: ax + aw / 2, y: ay + ah / 2 } },
+        { key: "ne", style: { top: -5, right: -5, cursor: "nesw-resize" }, anchor: { x: ax - aw / 2, y: ay + ah / 2 } },
+        { key: "sw", style: { bottom: -5, left: -5, cursor: "nesw-resize" }, anchor: { x: ax + aw / 2, y: ay - ah / 2 } },
+        { key: "se", style: { bottom: -5, right: -5, cursor: "nwse-resize" }, anchor: { x: ax - aw / 2, y: ay - ah / 2 } },
+      ];
       return (
         <div
           key={ann.id}
@@ -289,10 +299,10 @@ export const Canvas = ({
           style={{
             left: `${left}%`,
             top: `${top}%`,
-            width: `${(ann.width ?? 0) * 100}%`,
-            height: `${(ann.height ?? 0) * 100}%`,
+            width: `${aw * 100}%`,
+            height: `${ah * 100}%`,
             borderColor: cls.color,
-            backgroundColor: cls.color.replace(")", " / 0.1)"),
+            backgroundColor: "transparent",
           }}
           onMouseDown={(e) => handleBoxMouseDown(e, ann)}
         >
@@ -302,6 +312,25 @@ export const Canvas = ({
           >
             {cls.name}
           </span>
+          {isSel && tool === "select" && handles.map((h) => (
+            <div
+              key={h.key}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                setResizing({ id: ann.id, handle: h.key, anchorX: h.anchor.x, anchorY: h.anchor.y });
+                onSelectAnnotation(ann.id);
+              }}
+              style={{
+                position: "absolute",
+                width: 10,
+                height: 10,
+                background: cls.color,
+                border: "2px solid hsl(var(--background))",
+                borderRadius: 2,
+                ...h.style,
+              }}
+            />
+          ))}
         </div>
       );
     }
