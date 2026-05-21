@@ -2,7 +2,8 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTaskAnnotations } from "@/hooks/useTaskAnnotations";
 import { AnnotationKind, Task } from "@/types/annotation";
-import { getTask } from "@/lib/db";
+import { getTask, updateTask } from "@/lib/db";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { Toolbar } from "./Toolbar";
 import { ClassPanel } from "./ClassPanel";
