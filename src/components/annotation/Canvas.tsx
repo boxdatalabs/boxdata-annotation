@@ -40,6 +40,7 @@ export const Canvas = ({
   const [polyPoints, setPolyPoints] = useState<Point[]>([]);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
   const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
+  const [resizing, setResizing] = useState<{ id: string; handle: "nw" | "ne" | "sw" | "se"; anchorX: number; anchorY: number } | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(1);
