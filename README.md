@@ -2,7 +2,7 @@
 
 ## Project info
 
-**URL**: https://boxdata-annotation.lovable.app/
+**URL**: https://annotation-boxdata.lovable.app/
 
 ## How can I edit this code?
 
