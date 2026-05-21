@@ -3,6 +3,8 @@ import { BoundingBox, AnnotationClass, DrawingState, ImageData, AnnotationKind, 
 import { ZoomIn, ZoomOut, Maximize, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+type ResizeHandle = "nw" | "ne" | "sw" | "se";
+
 interface CanvasProps {
   image: ImageData | null;
   annotations: BoundingBox[];
@@ -40,6 +42,7 @@ export const Canvas = ({
   const [polyPoints, setPolyPoints] = useState<Point[]>([]);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
   const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
+  const [resizing, setResizing] = useState<{ id: string; anchorX: number; anchorY: number } | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(1);
@@ -190,6 +193,19 @@ export const Canvas = ({
       setHoverPoint(pos);
       if (drawing) {
         setDrawing((prev) => (prev ? { ...prev, currentX: pos.x, currentY: pos.y } : null));
+      } else if (resizing) {
+        const minX = Math.max(0, Math.min(resizing.anchorX, pos.x));
+        const maxX = Math.min(1, Math.max(resizing.anchorX, pos.x));
+        const minY = Math.max(0, Math.min(resizing.anchorY, pos.y));
+        const maxY = Math.min(1, Math.max(resizing.anchorY, pos.y));
+        const width = Math.max(0.005, maxX - minX);
+        const height = Math.max(0.005, maxY - minY);
+        onUpdateAnnotation(resizing.id, {
+          x: minX + width / 2,
+          y: minY + height / 2,
+          width,
+          height,
+        });
       } else if (dragging) {
         const ann = annotations.find((a) => a.id === dragging.id);
         if (ann && ann.kind !== "polygon" && ann.kind !== "polyline" && (ann.kind === "box" || !ann.kind)) {
@@ -201,7 +217,7 @@ export const Canvas = ({
         }
       }
     },
-    [drawing, dragging, annotations, getMousePosition, onUpdateAnnotation]
+    [drawing, resizing, dragging, annotations, getMousePosition, onUpdateAnnotation]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -224,8 +240,9 @@ export const Canvas = ({
       }
       setDrawing(null);
     }
+    if (resizing) setResizing(null);
     if (dragging) setDragging(null);
-  }, [drawing, dragging, selectedClassId, onAddAnnotation]);
+  }, [drawing, resizing, dragging, selectedClassId, onAddAnnotation]);
 
   const handleBoxMouseDown = useCallback(
     (e: React.MouseEvent, ann: BoundingBox) => {
@@ -241,6 +258,25 @@ export const Canvas = ({
       }
     },
     [tool, getMousePosition, onSelectAnnotation]
+  );
+
+  const handleResizeMouseDown = useCallback(
+    (e: React.MouseEvent, ann: BoundingBox, handle: ResizeHandle) => {
+      e.stopPropagation();
+      if (tool !== "select") return;
+      onSelectAnnotation(ann.id);
+      const left = (ann.x ?? 0) - (ann.width ?? 0) / 2;
+      const right = (ann.x ?? 0) + (ann.width ?? 0) / 2;
+      const top = (ann.y ?? 0) - (ann.height ?? 0) / 2;
+      const bottom = (ann.y ?? 0) + (ann.height ?? 0) / 2;
+      setDragging(null);
+      setResizing({
+        id: ann.id,
+        anchorX: handle.includes("w") ? right : left,
+        anchorY: handle.includes("n") ? bottom : top,
+      });
+    },
+    [tool, onSelectAnnotation]
   );
 
   const getClass = (classId: number) =>
