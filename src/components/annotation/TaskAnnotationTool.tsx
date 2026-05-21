@@ -293,6 +293,9 @@ export const TaskAnnotationTool = () => {
             <span>{getTotalAnnotations()} total annotations</span>
           </div>
         </div>
+      </header>
+
+
 
       {/* Toolbar */}
       <Toolbar
