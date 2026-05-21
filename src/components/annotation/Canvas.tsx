@@ -191,9 +191,22 @@ export const Canvas = ({
       setHoverPoint(pos);
       if (drawing) {
         setDrawing((prev) => (prev ? { ...prev, currentX: pos.x, currentY: pos.y } : null));
+      } else if (resizing) {
+        const minX = Math.min(resizing.anchorX, pos.x);
+        const maxX = Math.max(resizing.anchorX, pos.x);
+        const minY = Math.min(resizing.anchorY, pos.y);
+        const maxY = Math.max(resizing.anchorY, pos.y);
+        const w = Math.max(0.005, maxX - minX);
+        const h = Math.max(0.005, maxY - minY);
+        onUpdateAnnotation(resizing.id, {
+          x: minX + w / 2,
+          y: minY + h / 2,
+          width: w,
+          height: h,
+        });
       } else if (dragging) {
         const ann = annotations.find((a) => a.id === dragging.id);
-        if (ann && ann.kind !== "polygon" && ann.kind !== "polyline" && (ann.kind === "box" || !ann.kind)) {
+        if (ann && (ann.kind === "box" || !ann.kind)) {
           const w = ann.width ?? 0;
           const h = ann.height ?? 0;
           const newX = Math.max(w / 2, Math.min(1 - w / 2, pos.x - dragging.offsetX + w / 2));
@@ -202,7 +215,7 @@ export const Canvas = ({
         }
       }
     },
-    [drawing, dragging, annotations, getMousePosition, onUpdateAnnotation]
+    [drawing, dragging, resizing, annotations, getMousePosition, onUpdateAnnotation]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -226,7 +239,8 @@ export const Canvas = ({
       setDrawing(null);
     }
     if (dragging) setDragging(null);
-  }, [drawing, dragging, selectedClassId, onAddAnnotation]);
+    if (resizing) setResizing(null);
+  }, [drawing, dragging, resizing, selectedClassId, onAddAnnotation]);
 
   const handleBoxMouseDown = useCallback(
     (e: React.MouseEvent, ann: BoundingBox) => {
