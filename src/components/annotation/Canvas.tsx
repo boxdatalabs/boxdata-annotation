@@ -313,7 +313,7 @@ export const Canvas = ({
             width: `${(ann.width ?? 0) * 100}%`,
             height: `${(ann.height ?? 0) * 100}%`,
             borderColor: cls.color,
-            backgroundColor: cls.color.replace(")", " / 0.1)"),
+            backgroundColor: "transparent",
           }}
           onMouseDown={(e) => handleBoxMouseDown(e, ann)}
         >
@@ -323,6 +323,20 @@ export const Canvas = ({
           >
             {cls.name}
           </span>
+          {isSel && tool === "select" && (["nw", "ne", "sw", "se"] as ResizeHandle[]).map((handle) => (
+            <button
+              key={handle}
+              type="button"
+              aria-label={`Resize ${handle}`}
+              className={`absolute z-10 h-3 w-3 rounded-full border-2 border-background bg-primary ${
+                handle === "nw" ? "-left-1.5 -top-1.5 cursor-nwse-resize" :
+                handle === "ne" ? "-right-1.5 -top-1.5 cursor-nesw-resize" :
+                handle === "sw" ? "-left-1.5 -bottom-1.5 cursor-nesw-resize" :
+                "-right-1.5 -bottom-1.5 cursor-nwse-resize"
+              }`}
+              onMouseDown={(e) => handleResizeMouseDown(e, ann, handle)}
+            />
+          ))}
         </div>
       );
     }
@@ -448,7 +462,7 @@ export const Canvas = ({
             y={minY}
             width={w}
             height={h}
-            fill={cls.color.replace(")", " / 0.15)")}
+            fill="none"
             stroke={cls.color}
             strokeWidth={2}
             strokeDasharray="4 3"
