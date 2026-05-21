@@ -3,6 +3,8 @@ import { BoundingBox, AnnotationClass, DrawingState, ImageData, AnnotationKind, 
 import { ZoomIn, ZoomOut, Maximize, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+type ResizeHandle = "nw" | "ne" | "sw" | "se";
+
 interface CanvasProps {
   image: ImageData | null;
   annotations: BoundingBox[];
@@ -40,7 +42,7 @@ export const Canvas = ({
   const [polyPoints, setPolyPoints] = useState<Point[]>([]);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
   const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
-  const [resizing, setResizing] = useState<{ id: string; handle: "nw" | "ne" | "sw" | "se"; anchorX: number; anchorY: number } | null>(null);
+  const [resizing, setResizing] = useState<{ id: string; anchorX: number; anchorY: number } | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(1);
@@ -192,21 +194,21 @@ export const Canvas = ({
       if (drawing) {
         setDrawing((prev) => (prev ? { ...prev, currentX: pos.x, currentY: pos.y } : null));
       } else if (resizing) {
-        const minX = Math.min(resizing.anchorX, pos.x);
-        const maxX = Math.max(resizing.anchorX, pos.x);
-        const minY = Math.min(resizing.anchorY, pos.y);
-        const maxY = Math.max(resizing.anchorY, pos.y);
-        const w = Math.max(0.005, maxX - minX);
-        const h = Math.max(0.005, maxY - minY);
+        const minX = Math.max(0, Math.min(resizing.anchorX, pos.x));
+        const maxX = Math.min(1, Math.max(resizing.anchorX, pos.x));
+        const minY = Math.max(0, Math.min(resizing.anchorY, pos.y));
+        const maxY = Math.min(1, Math.max(resizing.anchorY, pos.y));
+        const width = Math.max(0.005, maxX - minX);
+        const height = Math.max(0.005, maxY - minY);
         onUpdateAnnotation(resizing.id, {
-          x: minX + w / 2,
-          y: minY + h / 2,
-          width: w,
-          height: h,
+          x: minX + width / 2,
+          y: minY + height / 2,
+          width,
+          height,
         });
       } else if (dragging) {
         const ann = annotations.find((a) => a.id === dragging.id);
-        if (ann && (ann.kind === "box" || !ann.kind)) {
+        if (ann && ann.kind !== "polygon" && ann.kind !== "polyline" && (ann.kind === "box" || !ann.kind)) {
           const w = ann.width ?? 0;
           const h = ann.height ?? 0;
           const newX = Math.max(w / 2, Math.min(1 - w / 2, pos.x - dragging.offsetX + w / 2));
@@ -215,7 +217,7 @@ export const Canvas = ({
         }
       }
     },
-    [drawing, dragging, resizing, annotations, getMousePosition, onUpdateAnnotation]
+    [drawing, resizing, dragging, annotations, getMousePosition, onUpdateAnnotation]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -238,9 +240,9 @@ export const Canvas = ({
       }
       setDrawing(null);
     }
-    if (dragging) setDragging(null);
     if (resizing) setResizing(null);
-  }, [drawing, dragging, resizing, selectedClassId, onAddAnnotation]);
+    if (dragging) setDragging(null);
+  }, [drawing, resizing, dragging, selectedClassId, onAddAnnotation]);
 
   const handleBoxMouseDown = useCallback(
     (e: React.MouseEvent, ann: BoundingBox) => {
@@ -256,6 +258,25 @@ export const Canvas = ({
       }
     },
     [tool, getMousePosition, onSelectAnnotation]
+  );
+
+  const handleResizeMouseDown = useCallback(
+    (e: React.MouseEvent, ann: BoundingBox, handle: ResizeHandle) => {
+      e.stopPropagation();
+      if (tool !== "select") return;
+      onSelectAnnotation(ann.id);
+      const left = (ann.x ?? 0) - (ann.width ?? 0) / 2;
+      const right = (ann.x ?? 0) + (ann.width ?? 0) / 2;
+      const top = (ann.y ?? 0) - (ann.height ?? 0) / 2;
+      const bottom = (ann.y ?? 0) + (ann.height ?? 0) / 2;
+      setDragging(null);
+      setResizing({
+        id: ann.id,
+        anchorX: handle.includes("w") ? right : left,
+        anchorY: handle.includes("n") ? bottom : top,
+      });
+    },
+    [tool, onSelectAnnotation]
   );
 
   const getClass = (classId: number) =>
@@ -282,16 +303,6 @@ export const Canvas = ({
     if (kind === "box") {
       const left = ((ann.x ?? 0) - (ann.width ?? 0) / 2) * 100;
       const top = ((ann.y ?? 0) - (ann.height ?? 0) / 2) * 100;
-      const ax = (ann.x ?? 0);
-      const ay = (ann.y ?? 0);
-      const aw = (ann.width ?? 0);
-      const ah = (ann.height ?? 0);
-      const handles: { key: "nw" | "ne" | "sw" | "se"; style: React.CSSProperties; anchor: { x: number; y: number } }[] = [
-        { key: "nw", style: { top: -5, left: -5, cursor: "nwse-resize" }, anchor: { x: ax + aw / 2, y: ay + ah / 2 } },
-        { key: "ne", style: { top: -5, right: -5, cursor: "nesw-resize" }, anchor: { x: ax - aw / 2, y: ay + ah / 2 } },
-        { key: "sw", style: { bottom: -5, left: -5, cursor: "nesw-resize" }, anchor: { x: ax + aw / 2, y: ay - ah / 2 } },
-        { key: "se", style: { bottom: -5, right: -5, cursor: "nwse-resize" }, anchor: { x: ax - aw / 2, y: ay - ah / 2 } },
-      ];
       return (
         <div
           key={ann.id}
@@ -299,8 +310,8 @@ export const Canvas = ({
           style={{
             left: `${left}%`,
             top: `${top}%`,
-            width: `${aw * 100}%`,
-            height: `${ah * 100}%`,
+            width: `${(ann.width ?? 0) * 100}%`,
+            height: `${(ann.height ?? 0) * 100}%`,
             borderColor: cls.color,
             backgroundColor: "transparent",
           }}
@@ -312,23 +323,18 @@ export const Canvas = ({
           >
             {cls.name}
           </span>
-          {isSel && tool === "select" && handles.map((h) => (
-            <div
-              key={h.key}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                setResizing({ id: ann.id, handle: h.key, anchorX: h.anchor.x, anchorY: h.anchor.y });
-                onSelectAnnotation(ann.id);
-              }}
-              style={{
-                position: "absolute",
-                width: 10,
-                height: 10,
-                background: cls.color,
-                border: "2px solid hsl(var(--background))",
-                borderRadius: 2,
-                ...h.style,
-              }}
+          {isSel && tool === "select" && (["nw", "ne", "sw", "se"] as ResizeHandle[]).map((handle) => (
+            <button
+              key={handle}
+              type="button"
+              aria-label={`Resize ${handle}`}
+              className={`absolute z-10 h-3 w-3 rounded-full border-2 border-background bg-primary ${
+                handle === "nw" ? "-left-1.5 -top-1.5 cursor-nwse-resize" :
+                handle === "ne" ? "-right-1.5 -top-1.5 cursor-nesw-resize" :
+                handle === "sw" ? "-left-1.5 -bottom-1.5 cursor-nesw-resize" :
+                "-right-1.5 -bottom-1.5 cursor-nwse-resize"
+              }`}
+              onMouseDown={(e) => handleResizeMouseDown(e, ann, handle)}
             />
           ))}
         </div>

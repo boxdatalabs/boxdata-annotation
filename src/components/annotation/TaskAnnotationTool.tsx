@@ -2,8 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTaskAnnotations } from "@/hooks/useTaskAnnotations";
 import { AnnotationKind, Task } from "@/types/annotation";
-import { getTask, updateTask } from "@/lib/db";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getTask } from "@/lib/db";
 
 import { Toolbar } from "./Toolbar";
 import { ClassPanel } from "./ClassPanel";
@@ -261,41 +260,14 @@ export const TaskAnnotationTool = () => {
             <p className="text-xs text-muted-foreground capitalize">{annotationKind} annotation</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Type:</span>
-            <Select
-              value={annotationKind}
-              onValueChange={async (v) => {
-                if (!taskId) return;
-                const kind = v as AnnotationKind;
-                await updateTask(taskId, { annotationKind: kind });
-                setTask((prev) => (prev ? { ...prev, annotationKind: kind } : prev));
-                toast.success(`Switched to ${kind}`);
-              }}
-            >
-              <SelectTrigger className="h-8 w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="box">Bounding Box</SelectItem>
-                <SelectItem value="polygon">Polygon</SelectItem>
-                <SelectItem value="polyline">Polyline</SelectItem>
-                <SelectItem value="point">Point</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="text-sm text-muted-foreground flex items-center gap-4">
-            <span>
-              {getAnnotatedImagesCount()}/{images.length} images annotated
-            </span>
-            <span>•</span>
-            <span>{getTotalAnnotations()} total annotations</span>
-          </div>
+        <div className="text-sm text-muted-foreground flex items-center gap-4">
+          <span>
+            {getAnnotatedImagesCount()}/{images.length} images annotated
+          </span>
+          <span>•</span>
+          <span>{getTotalAnnotations()} total annotations</span>
         </div>
       </header>
-
-
 
       {/* Toolbar */}
       <Toolbar
